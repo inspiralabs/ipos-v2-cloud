@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Trash2 } from 'lucide-react';
 import { apiFetch, clearToken, getToken } from '../../lib/auth';
 import { formatRupiah, formatThousands, parseThousands } from '../../lib/format';
 import { effectivePrice } from '../../lib/types';
@@ -19,6 +21,8 @@ import { ItemNoteEditor } from '../../components/pos/ItemNoteEditor';
 
 export default function PosPage() {
   const router = useRouter();
+  const prefersReducedMotion =
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [shift, setShift] = useState<Shift | null>(null);
@@ -273,27 +277,52 @@ export default function PosPage() {
               <p className="text-sm text-[var(--muted)]">Belum ada item. Ketuk menu untuk menambah.</p>
             ) : (
               <ul className="space-y-3">
-                {cart.map((line) => (
-                  <li key={line.line_id} className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-[var(--ink)]">{line.product_name}</p>
-                      {line.variant_summary && (
-                        <p className="truncate text-xs text-[var(--muted)]">{line.variant_summary}</p>
-                      )}
-                      <p className="text-xs text-[var(--muted)]">{formatRupiah(line.price)}</p>
-                      {line.notes && <p className="mt-0.5 truncate text-xs italic text-[var(--muted)]">&quot;{line.notes}&quot;</p>}
-                      <div className="mt-1">
-                        <ItemNoteEditor note={line.notes} onSave={(n) => setLineNote(line.line_id, n)} />
+                <AnimatePresence initial={false}>
+                  {cart.map((line) => (
+                    <motion.li
+                      key={line.line_id}
+                      layout
+                      initial={prefersReducedMotion ? false : { opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={
+                        prefersReducedMotion
+                          ? { opacity: 0 }
+                          : { opacity: 0, x: -20, height: 0, marginBottom: 0 }
+                      }
+                      transition={{ duration: prefersReducedMotion ? 0 : 0.2, ease: 'easeOut' }}
+                      drag={prefersReducedMotion ? false : 'x'}
+                      dragConstraints={{ left: 0, right: 0 }}
+                      dragElastic={{ left: 0.5, right: 0 }}
+                      onDragEnd={(_, info) => {
+                        if (info.offset.x < -80) {
+                          setCart((prev) => prev.filter((l) => l.line_id !== line.line_id));
+                        }
+                      }}
+                      className="relative flex items-start justify-between gap-3 rounded-xl bg-[var(--surface)]"
+                    >
+                      <div className="absolute inset-0 -z-10 flex items-center justify-end rounded-xl bg-red-500 px-4">
+                        <Trash2 className="h-4 w-4 text-white" />
                       </div>
-                    </div>
-                    <QtyStepper
-                      qty={line.qty}
-                      onIncrement={() => changeQty(line.line_id, 1)}
-                      onDecrement={() => changeQty(line.line_id, -1)}
-                      onRemove={() => setCart((prev) => prev.filter((l) => l.line_id !== line.line_id))}
-                    />
-                  </li>
-                ))}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-[var(--ink)]">{line.product_name}</p>
+                        {line.variant_summary && (
+                          <p className="truncate text-xs text-[var(--muted)]">{line.variant_summary}</p>
+                        )}
+                        <p className="text-xs text-[var(--muted)]">{formatRupiah(line.price)}</p>
+                        {line.notes && <p className="mt-0.5 truncate text-xs italic text-[var(--muted)]">&quot;{line.notes}&quot;</p>}
+                        <div className="mt-1">
+                          <ItemNoteEditor note={line.notes} onSave={(n) => setLineNote(line.line_id, n)} />
+                        </div>
+                      </div>
+                      <QtyStepper
+                        qty={line.qty}
+                        onIncrement={() => changeQty(line.line_id, 1)}
+                        onDecrement={() => changeQty(line.line_id, -1)}
+                        onRemove={() => setCart((prev) => prev.filter((l) => l.line_id !== line.line_id))}
+                      />
+                    </motion.li>
+                  ))}
+                </AnimatePresence>
               </ul>
             )}
           </div>
