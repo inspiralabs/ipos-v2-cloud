@@ -12,6 +12,7 @@ import { Button } from '../../components/ui/button';
 import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
 import { Modal } from '../../components/ui/modal';
+import { QtyStepper } from '../../components/pos/QtyStepper';
 
 export default function PosPage() {
   const router = useRouter();
@@ -264,23 +265,12 @@ export default function PosPage() {
                       )}
                       <p className="text-xs text-[var(--muted)]">{formatRupiah(line.price)}</p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <button
-                        aria-label={`Kurangi ${line.product_name}`}
-                        onClick={() => changeQty(line.line_id, -1)}
-                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--ink)] hover:bg-[var(--surface-2)]"
-                      >
-                        −
-                      </button>
-                      <span className="w-6 text-center text-sm font-semibold text-[var(--ink)]">{line.qty}</span>
-                      <button
-                        aria-label={`Tambah ${line.product_name}`}
-                        onClick={() => changeQty(line.line_id, 1)}
-                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--ink)] hover:bg-[var(--surface-2)]"
-                      >
-                        +
-                      </button>
-                    </div>
+                    <QtyStepper
+                      qty={line.qty}
+                      onIncrement={() => changeQty(line.line_id, 1)}
+                      onDecrement={() => changeQty(line.line_id, -1)}
+                      onRemove={() => setCart((prev) => prev.filter((l) => l.line_id !== line.line_id))}
+                    />
                   </li>
                 ))}
               </ul>
