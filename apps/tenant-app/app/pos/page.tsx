@@ -339,26 +339,26 @@ export default function PosPage() {
         </aside>
       </div>
 
-      {variantFor && (
-        <VariantModal
-          menu={variantFor}
-          groups={groupsForMenu(variantFor)}
-          onClose={() => setVariantFor(null)}
-          onConfirm={(deltas, summary) => {
-            addLine(variantFor, deltas, summary);
-            setVariantFor(null);
-          }}
-        />
-      )}
-
-      {payOpen && (
-        <PaymentModal
-          total={subtotal}
-          initialCustomer={customer}
-          onClose={() => setPayOpen(false)}
-          onConfirm={submitOrder}
-        />
-      )}
+      <AnimatePresence mode="wait">
+        {variantFor && (
+          <motion.div key="variant" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+            <VariantModal
+              menu={variantFor}
+              groups={groupsForMenu(variantFor)}
+              onClose={() => setVariantFor(null)}
+              onConfirm={(deltas, summary) => {
+                addLine(variantFor, deltas, summary);
+                setVariantFor(null);
+              }}
+            />
+          </motion.div>
+        )}
+        {payOpen && (
+          <motion.div key="payment" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+            <PaymentModal total={subtotal} initialCustomer={customer} onClose={() => setPayOpen(false)} onConfirm={submitOrder} />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {pickCustomerFromHeader && (
         <CustomerPicker
@@ -544,85 +544,89 @@ function PaymentModal({
   const change = Math.max(0, cashReceived - total);
   const canConfirm = method !== 'cash' || cashReceived >= total;
 
-  if (pickCustomer) {
-    return (
-      <CustomerPicker
-        onClose={() => setPickCustomer(false)}
-        onPick={(c) => {
-          setCustomer(c);
-          setPickCustomer(false);
-        }}
-      />
-    );
-  }
-
   return (
-    <Modal title="Bayar" onClose={onClose}>
-      <p className="mb-4 text-3xl font-bold text-[var(--ink)]">{formatRupiah(total)}</p>
+    <AnimatePresence mode="wait">
+      {pickCustomer ? (
+        <motion.div key="picker" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+          <CustomerPicker
+            onClose={() => setPickCustomer(false)}
+            onPick={(c) => {
+              setCustomer(c);
+              setPickCustomer(false);
+            }}
+          />
+        </motion.div>
+      ) : (
+        <motion.div key="payment-form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+          <Modal title="Bayar" onClose={onClose}>
+            <p className="mb-4 text-3xl font-bold text-[var(--ink)]">{formatRupiah(total)}</p>
 
-      {/* Pelanggan — opsional, muncul di struk */}
-      <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] p-3">
-        <div className="min-w-0">
-          <p className="text-xs text-[var(--muted)]">Pelanggan</p>
-          <p className="truncate text-sm font-medium text-[var(--ink)]">
-            {customer ? customer.name : 'Tanpa nama'}
-          </p>
-        </div>
-        <div className="flex shrink-0 gap-1">
-          {customer && (
-            <Button variant="ghost" size="sm" onClick={() => setCustomer(null)}>
-              Hapus
+            {/* Pelanggan — opsional, muncul di struk */}
+            <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] p-3">
+              <div className="min-w-0">
+                <p className="text-xs text-[var(--muted)]">Pelanggan</p>
+                <p className="truncate text-sm font-medium text-[var(--ink)]">
+                  {customer ? customer.name : 'Tanpa nama'}
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-1">
+                {customer && (
+                  <Button variant="ghost" size="sm" onClick={() => setCustomer(null)}>
+                    Hapus
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={() => setPickCustomer(true)}>
+                  {customer ? 'Ganti' : 'Pilih'}
+                </Button>
+              </div>
+            </div>
+
+            <div className="mb-4 grid grid-cols-3 gap-2">
+              {(['cash', 'qris', 'transfer'] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setMethod(m)}
+                  className={`h-11 rounded-lg text-sm font-semibold capitalize transition-colors ${
+                    method === m
+                      ? 'bg-[var(--primary)] text-[var(--primary-ink)]'
+                      : 'border border-[var(--border)] text-[var(--ink)] hover:bg-[var(--surface-2)]'
+                  }`}
+                >
+                  {m === 'cash' ? 'Tunai' : m === 'qris' ? 'QRIS' : 'Transfer'}
+                </button>
+              ))}
+            </div>
+
+            {method === 'cash' && (
+              <div className="mb-4">
+                <Field label="Uang Diterima">
+                  <Input
+                    inputMode="numeric" autoFocus
+                    className="h-12 text-lg font-semibold"
+                    value={formatThousands(cashInput)}
+                    onChange={(e) => setCashInput(parseThousands(e.target.value))}
+                  />
+                </Field>
+                {cashInput && (
+                  <p className="mt-2 text-sm text-[var(--muted)]">
+                    Kembalian: <span className="font-semibold text-[var(--ink)]">{formatRupiah(change)}</span>
+                  </p>
+                )}
+              </div>
+            )}
+
+            <Button
+              size="lg"
+              className="w-full"
+              disabled={!canConfirm}
+              onClick={() => onConfirm(method, method === 'cash' ? cashReceived : null, customer)}
+            >
+              Konfirmasi Bayar
             </Button>
-          )}
-          <Button variant="outline" size="sm" onClick={() => setPickCustomer(true)}>
-            {customer ? 'Ganti' : 'Pilih'}
-          </Button>
-        </div>
-      </div>
-
-      <div className="mb-4 grid grid-cols-3 gap-2">
-        {(['cash', 'qris', 'transfer'] as const).map((m) => (
-          <button
-            key={m}
-            onClick={() => setMethod(m)}
-            className={`h-11 rounded-lg text-sm font-semibold capitalize transition-colors ${
-              method === m
-                ? 'bg-[var(--primary)] text-[var(--primary-ink)]'
-                : 'border border-[var(--border)] text-[var(--ink)] hover:bg-[var(--surface-2)]'
-            }`}
-          >
-            {m === 'cash' ? 'Tunai' : m === 'qris' ? 'QRIS' : 'Transfer'}
-          </button>
-        ))}
-      </div>
-
-      {method === 'cash' && (
-        <div className="mb-4">
-          <Field label="Uang Diterima">
-            <Input
-              inputMode="numeric" autoFocus
-              className="h-12 text-lg font-semibold"
-              value={formatThousands(cashInput)}
-              onChange={(e) => setCashInput(parseThousands(e.target.value))}
-            />
-          </Field>
-          {cashInput && (
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              Kembalian: <span className="font-semibold text-[var(--ink)]">{formatRupiah(change)}</span>
-            </p>
-          )}
-        </div>
+          </Modal>
+        </motion.div>
       )}
-
-      <Button
-        size="lg"
-        className="w-full"
-        disabled={!canConfirm}
-        onClick={() => onConfirm(method, method === 'cash' ? cashReceived : null, customer)}
-      >
-        Konfirmasi Bayar
-      </Button>
-    </Modal>
+    </AnimatePresence>
   );
 }
 
