@@ -1,0 +1,1 @@
+ALTER TABLE "inspirapos_v2"."leads" ALTER COLUMN "phone" SET DATA TYPE varchar(30);

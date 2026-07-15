@@ -1,0 +1,1 @@
+ALTER TABLE "inspirapos_v2"."tenants" ADD COLUMN "setup_completed_at" timestamp with time zone;
