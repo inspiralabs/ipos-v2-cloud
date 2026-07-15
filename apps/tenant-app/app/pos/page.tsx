@@ -13,6 +13,8 @@ import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
 import { Modal } from '../../components/ui/modal';
 import { QtyStepper } from '../../components/pos/QtyStepper';
+import { TableNumberField } from '../../components/pos/TableNumberField';
+import { CustomerQuickAdd } from '../../components/pos/CustomerQuickAdd';
 
 export default function PosPage() {
   const router = useRouter();
@@ -29,6 +31,8 @@ export default function PosPage() {
   const [payOpen, setPayOpen] = useState(false);
   const [sandboxLimitMsg, setSandboxLimitMsg] = useState('');
   const [tableNumber, setTableNumber] = useState('');
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [pickCustomerFromHeader, setPickCustomerFromHeader] = useState(false);
 
   useEffect(() => {
     if (!getToken()) {
@@ -250,6 +254,14 @@ export default function PosPage() {
 
         {/* Panel cart */}
         <aside className="flex min-h-0 flex-1 flex-col border-t border-[var(--border)] bg-[var(--surface)] md:w-[40%] md:max-w-md md:flex-none md:border-l md:border-t-0 landscape:w-[40%] landscape:max-w-md landscape:flex-none landscape:border-l landscape:border-t-0">
+          <div className="flex items-center gap-2 border-b border-[var(--border)] p-3">
+            <TableNumberField value={tableNumber} onChange={setTableNumber} />
+            <CustomerQuickAdd
+              customer={customer}
+              onPick={setCustomer}
+              onOpenFullPicker={() => setPickCustomerFromHeader(true)}
+            />
+          </div>
           <div className="flex-1 overflow-y-auto p-4">
             <h2 className="mb-3 text-sm font-semibold text-[var(--ink)]">Keranjang</h2>
             {cart.length === 0 ? (
@@ -301,7 +313,24 @@ export default function PosPage() {
         />
       )}
 
-      {payOpen && <PaymentModal total={subtotal} onClose={() => setPayOpen(false)} onConfirm={submitOrder} />}
+      {payOpen && (
+        <PaymentModal
+          total={subtotal}
+          initialCustomer={customer}
+          onClose={() => setPayOpen(false)}
+          onConfirm={submitOrder}
+        />
+      )}
+
+      {pickCustomerFromHeader && (
+        <CustomerPicker
+          onClose={() => setPickCustomerFromHeader(false)}
+          onPick={(c) => {
+            setCustomer(c);
+            setPickCustomerFromHeader(false);
+          }}
+        />
+      )}
     </main>
   );
 }
@@ -459,16 +488,18 @@ function VariantModal({
 
 function PaymentModal({
   total,
+  initialCustomer,
   onClose,
   onConfirm,
 }: {
   total: number;
+  initialCustomer: Customer | null;
   onClose: () => void;
   onConfirm: (method: 'cash' | 'qris' | 'transfer', cashReceived: number | null, customer: Customer | null) => void;
 }) {
   const [method, setMethod] = useState<'cash' | 'qris' | 'transfer'>('cash');
   const [cashInput, setCashInput] = useState('');
-  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [customer, setCustomer] = useState<Customer | null>(initialCustomer);
   const [pickCustomer, setPickCustomer] = useState(false);
 
   const cashReceived = parseInt(cashInput || '0', 10);
