@@ -15,6 +15,7 @@ import { Modal } from '../../components/ui/modal';
 import { QtyStepper } from '../../components/pos/QtyStepper';
 import { TableNumberField } from '../../components/pos/TableNumberField';
 import { CustomerQuickAdd } from '../../components/pos/CustomerQuickAdd';
+import { ItemNoteEditor } from '../../components/pos/ItemNoteEditor';
 
 export default function PosPage() {
   const router = useRouter();
@@ -117,6 +118,10 @@ export default function PosPage() {
     setCart((prev) =>
       prev.map((l) => (l.line_id === lineId ? { ...l, qty: l.qty + delta } : l)).filter((l) => l.qty > 0)
     );
+  }
+
+  function setLineNote(lineId: string, note: string) {
+    setCart((prev) => prev.map((l) => (l.line_id === lineId ? { ...l, notes: note || null } : l)));
   }
 
   async function openShift(cashierName: string, openingCash: number) {
@@ -276,6 +281,10 @@ export default function PosPage() {
                         <p className="truncate text-xs text-[var(--muted)]">{line.variant_summary}</p>
                       )}
                       <p className="text-xs text-[var(--muted)]">{formatRupiah(line.price)}</p>
+                      {line.notes && <p className="mt-0.5 truncate text-xs italic text-[var(--muted)]">&quot;{line.notes}&quot;</p>}
+                      <div className="mt-1">
+                        <ItemNoteEditor note={line.notes} onSave={(n) => setLineNote(line.line_id, n)} />
+                      </div>
                     </div>
                     <QtyStepper
                       qty={line.qty}
