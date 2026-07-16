@@ -4,7 +4,7 @@ import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import { z } from 'zod';
 import { and, eq, between, sql } from 'drizzle-orm';
-import { createDb } from '@ipos-cloud/shared';
+import { createDb, requireFeature } from '@ipos-cloud/shared';
 import { pos_orders, pos_order_items, menus } from '@ipos-cloud/drizzle-schema';
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info' } });
@@ -89,6 +89,72 @@ app.get('/api/v1/reports/sales-summary', { preHandler: requireAuth }, async (req
     change_percent,
   };
 });
+
+// ── GET /api/v1/reports/top-menu / bottom-menu ────────────────────────────────
+
+const menuRankQuery = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+});
+
+app.get('/api/v1/reports/top-menu', { preHandler: requireAuth }, async (req) => {
+  const { from, to, limit } = menuRankQuery.parse(req.query);
+  const user = jwtUser(req);
+  const { fromDate, toDate } = parseRange(from, to);
+
+  return db
+    .select({
+      menu_id: pos_order_items.menu_id,
+      product_name: pos_order_items.product_name,
+      total_qty: sql<number>`sum(${pos_order_items.qty})`,
+      total_revenue: sql<number>`sum(${pos_order_items.price} * ${pos_order_items.qty})`,
+    })
+    .from(pos_order_items)
+    .innerJoin(pos_orders, eq(pos_order_items.order_id, pos_orders.id))
+    .where(
+      and(
+        eq(pos_orders.tenant_id, user.tenant_id),
+        eq(pos_orders.status, 'paid'),
+        between(pos_orders.created_at, fromDate, toDate)
+      )
+    )
+    .groupBy(pos_order_items.menu_id, pos_order_items.product_name)
+    .orderBy(sql`sum(${pos_order_items.qty}) desc`)
+    .limit(limit);
+});
+
+app.get(
+  '/api/v1/reports/bottom-menu',
+  { preHandler: [requireAuth, requireFeature('advanced_report')] },
+  async (req) => {
+    const { from, to, limit } = menuRankQuery.parse(req.query);
+    const user = jwtUser(req);
+    const { fromDate, toDate } = parseRange(from, to);
+
+    return db
+      .select({
+        menu_id: pos_order_items.menu_id,
+        product_name: pos_order_items.product_name,
+        total_qty: sql<number>`sum(${pos_order_items.qty})`,
+        total_revenue: sql<number>`sum(${pos_order_items.price} * ${pos_order_items.qty})`,
+      })
+      .from(pos_order_items)
+      .innerJoin(pos_orders, eq(pos_order_items.order_id, pos_orders.id))
+      .innerJoin(menus, eq(pos_order_items.menu_id, menus.id))
+      .where(
+        and(
+          eq(pos_orders.tenant_id, user.tenant_id),
+          eq(pos_orders.status, 'paid'),
+          eq(menus.is_active, true),
+          between(pos_orders.created_at, fromDate, toDate)
+        )
+      )
+      .groupBy(pos_order_items.menu_id, pos_order_items.product_name)
+      .orderBy(sql`sum(${pos_order_items.qty}) asc`)
+      .limit(limit);
+  }
+);
 
 app.setErrorHandler((error: Error & { statusCode?: number; code?: string }, _req, reply) => {
   app.log.error(error);
