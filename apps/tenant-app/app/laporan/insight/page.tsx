@@ -4,13 +4,18 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ArrowLeft } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { apiFetch } from '@/lib/auth';
 import { useTenant } from '@/components/layout/TenantContext';
 import { hasFeature } from '@/lib/plan-features';
 import { buildInsights, type SalesSummary, type MenuRank, type PeakHours } from '@/lib/insights';
+import { formatRupiah } from '@/lib/format';
 import { DateRangePicker, rangeFor, type DateRange } from '@/components/insight/DateRangePicker';
 import { InsightCard } from '@/components/insight/InsightCard';
+import { MenuRankTable } from '@/components/insight/MenuRankTable';
+import { PlanGate } from '@/components/PlanGate';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
 export default function InsightPage() {
   const { tenant } = useTenant();
@@ -81,6 +86,38 @@ export default function InsightPage() {
               <InsightCard key={i} insight={insight} />
             ))}
           </motion.div>
+        )}
+
+        {!loading && summary && (
+          <>
+            <Card className="mt-4">
+              <CardHeader>
+                <CardTitle>Tren Omzet</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart
+                    data={[
+                      { label: 'Periode Sebelumnya', omzet: summary.previous_period.total_omzet },
+                      { label: 'Periode Ini', omzet: summary.total_omzet },
+                    ]}
+                  >
+                    <XAxis dataKey="label" stroke="var(--muted)" fontSize={12} />
+                    <YAxis stroke="var(--muted)" fontSize={12} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
+                    <Tooltip formatter={(value: number) => formatRupiah(value)} />
+                    <Line type="monotone" dataKey="omzet" stroke="var(--primary)" strokeWidth={2} dot={{ r: 4 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <MenuRankTable title="Menu Terlaris" rows={topMenu} emptyMessage="Belum ada transaksi di periode ini." />
+              <PlanGate featureKey="advanced_report" featureLabel="Menu kurang laku">
+                <MenuRankTable title="Menu Kurang Laku" rows={bottomMenu ?? []} emptyMessage="Belum ada data." />
+              </PlanGate>
+            </div>
+          </>
         )}
       </div>
     </div>
