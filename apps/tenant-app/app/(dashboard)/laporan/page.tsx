@@ -6,54 +6,60 @@ import { Download, Sparkles } from 'lucide-react';
 import { apiFetch } from '@/lib/auth';
 import { formatRupiah } from '@/lib/format';
 import { PlanGate } from '@/components/PlanGate';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { DateRangePicker, rangeFor, type DateRange } from '@/components/insight/DateRangePicker';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 
-type SalesRow = { date: string; total_transactions: number; total_omzet: number };
+type SalesSummary = {
+  total_omzet: number;
+  total_transactions: number;
+  avg_transaction: number;
+  change_percent: number;
+};
 
-function SalesReport({ period }: { period: 'daily' | 'weekly' | 'monthly' | 'per_cashier' }) {
-  const [rows, setRows] = useState<SalesRow[] | null>(null);
+function SalesSummaryCard({ range }: { range: DateRange }) {
+  const [summary, setSummary] = useState<SalesSummary | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    setRows(null);
+    setSummary(null);
     setFailed(false);
-    apiFetch(`/api/v1/reports/sales?period=${period}`)
-      .then(setRows)
+    apiFetch(`/api/v1/reports/sales-summary?from=${range.from}&to=${range.to}`)
+      .then(setSummary)
       .catch(() => setFailed(true));
-  }, [period]);
+  }, [range.from, range.to]);
 
   if (failed) return <EmptyState>Belum ada data laporan untuk periode ini.</EmptyState>;
-  if (!rows) return <Skeleton className="h-40 w-full" />;
-  if (rows.length === 0) return <EmptyState>Belum ada transaksi tercatat.</EmptyState>;
+  if (!summary) return <Skeleton className="h-40 w-full" />;
+  if (summary.total_transactions === 0) return <EmptyState>Belum ada transaksi tercatat.</EmptyState>;
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Tanggal</TableHead>
-          <TableHead>Transaksi</TableHead>
-          <TableHead>Omzet</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((r) => (
-          <TableRow key={r.date}>
-            <TableCell>{r.date}</TableCell>
-            <TableCell>{r.total_transactions}</TableCell>
-            <TableCell className="font-semibold">{formatRupiah(r.total_omzet)}</TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div>
+        <p className="text-xs text-[var(--muted)]">Omzet</p>
+        <p className="text-lg font-bold text-[var(--ink)]">{formatRupiah(summary.total_omzet)}</p>
+        <p className={`text-xs ${summary.change_percent >= 0 ? 'text-[var(--status-active)]' : 'text-[var(--muted)]'}`}>
+          {summary.change_percent >= 0 ? '+' : ''}
+          {summary.change_percent}% dari periode sebelumnya
+        </p>
+      </div>
+      <div>
+        <p className="text-xs text-[var(--muted)]">Transaksi</p>
+        <p className="text-lg font-bold text-[var(--ink)]">{summary.total_transactions}</p>
+      </div>
+      <div>
+        <p className="text-xs text-[var(--muted)]">Rata-rata / Transaksi</p>
+        <p className="text-lg font-bold text-[var(--ink)]">{formatRupiah(summary.avg_transaction)}</p>
+      </div>
+    </div>
   );
 }
 
 export default function LaporanPage() {
+  const [range, setRange] = useState<DateRange>(rangeFor('today'));
+
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -72,32 +78,13 @@ export default function LaporanPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="daily">
-        <TabsList>
-          <TabsTrigger value="daily">Harian</TabsTrigger>
-          <TabsTrigger value="weekly">Mingguan</TabsTrigger>
-          <TabsTrigger value="monthly">Bulanan</TabsTrigger>
-          <TabsTrigger value="per_cashier">Per Kasir</TabsTrigger>
-        </TabsList>
-        <TabsContent value="daily">
-          <Card><CardContent className="pt-4"><SalesReport period="daily" /></CardContent></Card>
-        </TabsContent>
-        <TabsContent value="weekly">
-          <PlanGate featureKey="advanced_report" featureLabel="Laporan mingguan">
-            <Card><CardContent className="pt-4"><SalesReport period="weekly" /></CardContent></Card>
-          </PlanGate>
-        </TabsContent>
-        <TabsContent value="monthly">
-          <PlanGate featureKey="advanced_report" featureLabel="Laporan bulanan">
-            <Card><CardContent className="pt-4"><SalesReport period="monthly" /></CardContent></Card>
-          </PlanGate>
-        </TabsContent>
-        <TabsContent value="per_cashier">
-          <PlanGate featureKey="advanced_report" featureLabel="Laporan per kasir">
-            <Card><CardContent className="pt-4"><SalesReport period="per_cashier" /></CardContent></Card>
-          </PlanGate>
-        </TabsContent>
-      </Tabs>
+      <DateRangePicker value={range} onChange={setRange} />
+
+      <Card>
+        <CardContent className="pt-4">
+          <SalesSummaryCard range={range} />
+        </CardContent>
+      </Card>
     </div>
   );
 }
