@@ -1,14 +1,48 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 import { ArrowLeft } from 'lucide-react';
+import { apiFetch } from '@/lib/auth';
 import { useTenant } from '@/components/layout/TenantContext';
+import { hasFeature } from '@/lib/plan-features';
+import { buildInsights, type SalesSummary, type MenuRank, type PeakHours } from '@/lib/insights';
 import { DateRangePicker, rangeFor, type DateRange } from '@/components/insight/DateRangePicker';
+import { InsightCard } from '@/components/insight/InsightCard';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function InsightPage() {
   const { tenant } = useTenant();
   const [range, setRange] = useState<DateRange>(rangeFor('week'));
+  const [summary, setSummary] = useState<SalesSummary | null>(null);
+  const [topMenu, setTopMenu] = useState<MenuRank[]>([]);
+  const [bottomMenu, setBottomMenu] = useState<MenuRank[] | null>(null);
+  const [peakHours, setPeakHours] = useState<PeakHours | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const canAdvanced = hasFeature(tenant.plan, 'advanced_report');
+
+  useEffect(() => {
+    setLoading(true);
+    const qs = `from=${range.from}&to=${range.to}`;
+    Promise.all([
+      apiFetch(`/api/v1/reports/sales-summary?${qs}`),
+      apiFetch(`/api/v1/reports/top-menu?${qs}&limit=5`),
+      canAdvanced ? apiFetch(`/api/v1/reports/bottom-menu?${qs}&limit=5`).catch(() => null) : Promise.resolve(null),
+      canAdvanced ? apiFetch(`/api/v1/reports/peak-hours?${qs}`).catch(() => null) : Promise.resolve(null),
+    ])
+      .then(([s, t, b, p]) => {
+        setSummary(s);
+        setTopMenu(t);
+        setBottomMenu(b);
+        setPeakHours(p);
+      })
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range.from, range.to, canAdvanced]);
+
+  const insights = summary ? buildInsights(summary, topMenu, bottomMenu, peakHours, 'periode sebelumnya') : [];
 
   return (
     <div className="min-h-dvh bg-[var(--bg)]">
@@ -28,11 +62,26 @@ export default function InsightPage() {
         </div>
         <DateRangePicker value={range} onChange={setRange} />
       </header>
+
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-        {/* Insight cards, trend chart, top/bottom menu, peak-hour heatmap wired in Task 9 */}
-        <p className="text-sm text-[var(--muted)]">
-          Rentang: {range.from} — {range.to}
-        </p>
+        {loading ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-24 w-full" />
+            ))}
+          </div>
+        ) : (
+          <motion.div
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+            initial="hidden"
+            animate="visible"
+            variants={{ visible: { transition: { staggerChildren: 0.05 } } }}
+          >
+            {insights.map((insight, i) => (
+              <InsightCard key={i} insight={insight} />
+            ))}
+          </motion.div>
+        )}
       </div>
     </div>
   );
