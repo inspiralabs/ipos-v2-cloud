@@ -156,6 +156,55 @@ app.get(
   }
 );
 
+// ── GET /api/v1/reports/peak-hours ────────────────────────────────────────────
+
+app.get(
+  '/api/v1/reports/peak-hours',
+  { preHandler: [requireAuth, requireFeature('advanced_report')] },
+  async (req) => {
+    const { from, to } = dateRangeQuery.parse(req.query);
+    const user = jwtUser(req);
+    const { fromDate, toDate } = parseRange(from, to);
+
+    const byHour = await db
+      .select({
+        hour: sql<number>`extract(hour from ${pos_orders.created_at})`,
+        transaction_count: sql<number>`count(*)`,
+      })
+      .from(pos_orders)
+      .where(
+        and(
+          eq(pos_orders.tenant_id, user.tenant_id),
+          eq(pos_orders.status, 'paid'),
+          between(pos_orders.created_at, fromDate, toDate)
+        )
+      )
+      .groupBy(sql`extract(hour from ${pos_orders.created_at})`)
+      .orderBy(sql`extract(hour from ${pos_orders.created_at})`);
+
+    const byDay = await db
+      .select({
+        day_of_week: sql<number>`extract(dow from ${pos_orders.created_at})`,
+        transaction_count: sql<number>`count(*)`,
+      })
+      .from(pos_orders)
+      .where(
+        and(
+          eq(pos_orders.tenant_id, user.tenant_id),
+          eq(pos_orders.status, 'paid'),
+          between(pos_orders.created_at, fromDate, toDate)
+        )
+      )
+      .groupBy(sql`extract(dow from ${pos_orders.created_at})`)
+      .orderBy(sql`extract(dow from ${pos_orders.created_at})`);
+
+    return {
+      by_hour: byHour.map((r) => ({ hour: Number(r.hour), transaction_count: Number(r.transaction_count) })),
+      by_day: byDay.map((r) => ({ day_of_week: Number(r.day_of_week), transaction_count: Number(r.transaction_count) })),
+    };
+  }
+);
+
 app.setErrorHandler((error: Error & { statusCode?: number; code?: string }, _req, reply) => {
   app.log.error(error);
   reply.code(error.statusCode ?? 500).send({ error: error.message, code: error.code || 'INTERNAL_ERROR' });
