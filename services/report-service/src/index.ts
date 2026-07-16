@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { and, eq, between, sql } from 'drizzle-orm';
 import { createDb, requireFeature } from '@ipos-cloud/shared';
 import { pos_orders, pos_order_items, menus } from '@ipos-cloud/drizzle-schema';
+import { parseRange } from './date-range.js';
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info' } });
 app.register(cors, { origin: process.env.CORS_ORIGIN || true, credentials: true });
@@ -34,15 +35,6 @@ const dateRangeQuery = z.object({
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
-
-function parseRange(from: string, to: string) {
-  const fromDate = new Date(from + 'T00:00:00Z');
-  const toDate = new Date(to + 'T23:59:59Z');
-  const spanMs = toDate.getTime() - fromDate.getTime();
-  const prevTo = new Date(fromDate.getTime() - 1000); // 1 second before current range starts
-  const prevFrom = new Date(prevTo.getTime() - spanMs);
-  return { fromDate, toDate, prevFrom, prevTo };
-}
 
 // ── GET /api/v1/reports/sales-summary ─────────────────────────────────────────
 
