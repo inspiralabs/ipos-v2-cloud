@@ -13,6 +13,7 @@ import { formatRupiah } from '@/lib/format';
 import { DateRangePicker, rangeFor, type DateRange } from '@/components/insight/DateRangePicker';
 import { InsightCard } from '@/components/insight/InsightCard';
 import { MenuRankTable } from '@/components/insight/MenuRankTable';
+import { PeakHourHeatmap } from '@/components/insight/PeakHourHeatmap';
 import { PlanGate } from '@/components/PlanGate';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -115,6 +116,16 @@ export default function InsightPage() {
               <MenuRankTable title="Menu Terlaris" rows={topMenu} emptyMessage="Belum ada transaksi di periode ini." />
               <PlanGate featureKey="advanced_report" featureLabel="Menu kurang laku">
                 <MenuRankTable title="Menu Kurang Laku" rows={bottomMenu ?? []} emptyMessage="Belum ada data." />
+              </PlanGate>
+            </div>
+
+            <div className="mt-4">
+              <PlanGate featureKey="advanced_report" featureLabel="Jam tersibuk">
+                {peakHours ? (
+                  <PeakHourHeatmap data={peakHours} />
+                ) : (
+                  <PeakHourHeatmap data={{ by_hour: [], by_day: [] }} />
+                )}
               </PlanGate>
             </div>
           </>
