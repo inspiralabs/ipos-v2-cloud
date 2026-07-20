@@ -652,7 +652,7 @@ function PaymentModal({
             onClick={() => setMethod(m)}
             className={`h-11 rounded-lg text-sm font-semibold capitalize transition-colors ${
               method === m
-                ? 'bg-[var(--primary)] text-[var(--primary-ink)]'
+                ? 'bg-[var(--nav-active)] text-[var(--nav-active-ink)]'
                 : 'border border-[var(--border)] text-[var(--ink)] hover:bg-[var(--surface-2)]'
             }`}
           >

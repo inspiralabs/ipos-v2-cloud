@@ -73,11 +73,11 @@ export function MenuCard({
             <span className="text-xs font-semibold text-[var(--muted)]">HABIS</span>
           ) : menu.discount_price != null ? (
             <>
-              <span className="text-xs text-[var(--muted)] line-through">{formatRupiah(menu.price)}</span>
-              <span className="text-sm font-bold text-[var(--primary)]">{formatRupiah(menu.discount_price)}</span>
+              <span className="text-xs text-[var(--muted)] line-through tabular-nums">{formatRupiah(menu.price)}</span>
+              <span className="text-sm font-bold text-[var(--primary)] tabular-nums">{formatRupiah(menu.discount_price)}</span>
             </>
           ) : (
-            <span className="text-sm font-bold text-[var(--ink)]">{formatRupiah(menu.price)}</span>
+            <span className="text-sm font-bold text-[var(--ink)] tabular-nums">{formatRupiah(menu.price)}</span>
           )}
         </div>
         {groupCount > 0 && <p className="mt-1 text-xs text-[var(--muted)]">{groupCount} variasi</p>}

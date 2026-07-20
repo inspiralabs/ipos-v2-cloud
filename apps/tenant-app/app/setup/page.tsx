@@ -324,7 +324,7 @@ function MenuStep({ onNext, onBack }: { onNext: () => void; onBack: () => void }
           {menus.map((m) => (
             <li key={m.id} className="flex items-center justify-between rounded-lg bg-[var(--surface-2)] px-3 py-2 text-sm">
               <span className="text-[var(--ink)]">{m.name}</span>
-              <span className="font-semibold text-[var(--ink)]">{formatRupiah(m.price)}</span>
+              <span className="font-semibold text-[var(--ink)] tabular-nums">{formatRupiah(m.price)}</span>
             </li>
           ))}
         </ul>

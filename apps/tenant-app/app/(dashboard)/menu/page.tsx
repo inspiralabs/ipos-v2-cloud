@@ -303,7 +303,7 @@ function MenuForm({
                     onClick={() => setDiscountType(t)}
                     className={`h-9 flex-1 rounded-lg text-sm font-semibold transition-colors ${
                       discountType === t
-                        ? 'bg-[var(--primary)] text-[var(--primary-ink)]'
+                        ? 'bg-[var(--nav-active)] text-[var(--nav-active-ink)]'
                         : 'border border-[var(--border)] text-[var(--ink)] hover:bg-[var(--surface-2)]'
                     }`}
                   >
