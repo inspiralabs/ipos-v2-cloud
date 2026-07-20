@@ -302,12 +302,27 @@ importers:
       '@fastify/cors':
         specifier: ^11.0.0
         version: 11.2.0
+      '@fastify/jwt':
+        specifier: ^10.1.0
+        version: 10.1.0
+      '@ipos-cloud/drizzle-schema':
+        specifier: workspace:*
+        version: link:../../packages/drizzle-schema
+      '@ipos-cloud/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
+      drizzle-orm:
+        specifier: ^0.36.0
+        version: 0.36.4(@types/pg@8.20.0)(@types/react@19.2.17)(pg@8.22.0)(react@19.2.7)
       fastify:
         specifier: ^5.0.0
         version: 5.8.5
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
