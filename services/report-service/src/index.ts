@@ -7,6 +7,7 @@ import { and, eq, between, sql } from 'drizzle-orm';
 import { createDb, requireFeature } from '@ipos-cloud/shared';
 import { pos_orders, pos_order_items, menus } from '@ipos-cloud/drizzle-schema';
 import { parseRange } from './date-range.js';
+import { bucketLabel, type Granularity } from './timeseries.js';
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info' } });
 app.register(cors, { origin: process.env.CORS_ORIGIN || true, credentials: true });
@@ -196,6 +197,47 @@ app.get(
     };
   }
 );
+
+// ── GET /api/v1/reports/timeseries ────────────────────────────────────────────
+
+const timeseriesQuery = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  granularity: z.enum(['hour', 'day', 'week', 'month']),
+});
+
+app.get('/api/v1/reports/timeseries', { preHandler: requireAuth }, async (req) => {
+  const { from, to, granularity } = timeseriesQuery.parse(req.query);
+  const user = jwtUser(req);
+  const { fromDate, toDate } = parseRange(from, to);
+
+  const rows = await db
+    .select({
+      created_at: pos_orders.created_at,
+      total: pos_orders.total,
+    })
+    .from(pos_orders)
+    .where(
+      and(
+        eq(pos_orders.tenant_id, user.tenant_id),
+        eq(pos_orders.status, 'paid'),
+        between(pos_orders.created_at, fromDate, toDate)
+      )
+    );
+
+  const buckets = new Map<string, { omzet: number; transaction_count: number }>();
+  for (const row of rows) {
+    const label = bucketLabel(row.created_at, granularity as Granularity);
+    const entry = buckets.get(label) ?? { omzet: 0, transaction_count: 0 };
+    entry.omzet += Number(row.total);
+    entry.transaction_count += 1;
+    buckets.set(label, entry);
+  }
+
+  return Array.from(buckets.entries())
+    .map(([bucket, v]) => ({ bucket, ...v }))
+    .sort((a, b) => a.bucket.localeCompare(b.bucket));
+});
 
 app.setErrorHandler((error: Error & { statusCode?: number; code?: string }, _req, reply) => {
   app.log.error(error);
