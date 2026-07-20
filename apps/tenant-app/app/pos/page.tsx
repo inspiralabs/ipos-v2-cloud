@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Printer, UtensilsCrossed } from 'lucide-react';
 import { apiFetch, clearToken, getToken } from '../../lib/auth';
 import { formatRupiah, formatThousands, parseThousands } from '../../lib/format';
 import { effectivePrice } from '../../lib/types';
@@ -18,6 +18,7 @@ import { QtyStepper } from '../../components/pos/QtyStepper';
 import { TableNumberField } from '../../components/pos/TableNumberField';
 import { CustomerQuickAdd } from '../../components/pos/CustomerQuickAdd';
 import { ItemNoteEditor } from '../../components/pos/ItemNoteEditor';
+import { printReceipt, type ReceiptOrder, type ReceiptStore } from '../../lib/receipt';
 
 export default function PosPage() {
   const router = useRouter();
@@ -38,6 +39,8 @@ export default function PosPage() {
   const [tableNumber, setTableNumber] = useState('');
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [pickCustomerFromHeader, setPickCustomerFromHeader] = useState(false);
+  const [store, setStore] = useState<ReceiptStore>({ name: 'Toko', address: null, phone: null });
+  const [lastOrder, setLastOrder] = useState<ReceiptOrder | null>(null);
 
   useEffect(() => {
     if (!getToken()) {
@@ -50,13 +53,15 @@ export default function PosPage() {
       apiFetch('/api/v1/catalog/variant-groups'),
       apiFetch('/api/v1/catalog/menu-variant-groups'),
       apiFetch('/api/v1/pos/shifts/current').catch((e) => (e.status === 404 ? null : Promise.reject(e))),
+      apiFetch('/api/v1/tenants/me').catch(() => null),
     ])
-      .then(([cats, ms, gs, ls, currentShift]) => {
+      .then(([cats, ms, gs, ls, currentShift, tenant]) => {
         setCategories(cats);
         setMenus(ms);
         setGroups(gs);
         setLinks(ls);
         setShift(currentShift);
+        if (tenant) setStore({ name: tenant.name, address: tenant.address, phone: tenant.phone });
       })
       .catch((e) => {
         if (e.status === 401) {
@@ -144,20 +149,31 @@ export default function PosPage() {
   async function submitOrder(
     paymentMethod: 'cash' | 'qris' | 'transfer',
     cashReceived: number | null,
-    customer: Customer | null
+    customer: Customer | null,
+    discount: number
   ) {
     if (!cart.length) return;
-    const total = subtotal;
+    const total = Math.max(0, subtotal - discount);
     const change = paymentMethod === 'cash' && cashReceived != null ? Math.max(0, cashReceived - total) : null;
+    const orderId = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    const items = cart.map((l) => ({
+      menu_id: l.menu_id,
+      product_name: l.product_name,
+      variant_summary: l.variant_summary,
+      price: l.price,
+      qty: l.qty,
+      notes: l.notes,
+    }));
     try {
       await apiFetch('/api/v1/pos/orders', {
         method: 'POST',
         body: JSON.stringify({
-          id: crypto.randomUUID(),
+          id: orderId,
           shift_id: shift?.id ?? null,
           status: 'paid',
           subtotal,
-          discount: 0,
+          discount,
           total,
           payment_method: paymentMethod,
           cash_received: cashReceived,
@@ -165,16 +181,23 @@ export default function PosPage() {
           customer_id: customer?.id ?? null,
           customer_name: customer?.name ?? null,
           table_number: tableNumber || null,
-          created_at: new Date().toISOString(),
-          items: cart.map((l) => ({
-            menu_id: l.menu_id,
-            product_name: l.product_name,
-            variant_summary: l.variant_summary,
-            price: l.price,
-            qty: l.qty,
-            notes: l.notes,
-          })),
+          created_at: createdAt,
+          items,
         }),
+      });
+      setLastOrder({
+        id: orderId,
+        items,
+        subtotal,
+        discount,
+        total,
+        payment_method: paymentMethod,
+        cash_received: cashReceived,
+        change_amount: change,
+        cashier_name: shift?.cashier_name ?? 'Kasir',
+        customer_name: customer?.name ?? null,
+        table_number: tableNumber || null,
+        created_at: createdAt,
       });
       setCart([]);
       setPayOpen(false);
@@ -309,7 +332,7 @@ export default function PosPage() {
                         {line.variant_summary && (
                           <p className="truncate text-xs text-[var(--muted)]">{line.variant_summary}</p>
                         )}
-                        <p className="text-xs text-[var(--muted)]">{formatRupiah(line.price)}</p>
+                        <p className="text-xs text-[var(--muted)] tabular-nums">{formatRupiah(line.price)}</p>
                         {line.notes && <p className="mt-0.5 truncate text-xs italic text-[var(--muted)]">&quot;{line.notes}&quot;</p>}
                         <div className="mt-1">
                           <ItemNoteEditor note={line.notes} onSave={(n) => setLineNote(line.line_id, n)} />
@@ -331,7 +354,7 @@ export default function PosPage() {
           <div className="border-t border-[var(--border)] p-4">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-sm text-[var(--muted)]">Total</span>
-              <span className="text-xl font-bold text-[var(--ink)]">{formatRupiah(subtotal)}</span>
+              <span className="text-xl font-bold text-[var(--ink)] tabular-nums">{formatRupiah(subtotal)}</span>
             </div>
             <Button size="lg" disabled={cart.length === 0 || !!sandboxLimitMsg} onClick={() => setPayOpen(true)} className="w-full">
               Bayar
@@ -354,6 +377,9 @@ export default function PosPage() {
       {payOpen && (
         <PaymentModal total={subtotal} initialCustomer={customer} onClose={() => setPayOpen(false)} onConfirm={submitOrder} />
       )}
+      {lastOrder && (
+        <ReceiptSuccessModal order={lastOrder} store={store} onClose={() => setLastOrder(null)} />
+      )}
 
       {pickCustomerFromHeader && (
         <CustomerPicker
@@ -374,7 +400,7 @@ function CategoryChip({ label, active, onClick }: { label: string; active: boole
       onClick={onClick}
       className={`h-10 shrink-0 rounded-full px-4 text-sm font-medium transition-colors ${
         active
-          ? 'bg-[var(--primary)] text-[var(--primary-ink)]'
+          ? 'bg-[var(--nav-active)] text-[var(--nav-active-ink)]'
           : 'border border-[var(--border)] text-[var(--ink)] hover:bg-[var(--surface-2)]'
       }`}
     >
@@ -389,27 +415,43 @@ function MenuCard({ menu, hasVariants, onTap }: { menu: Menu; hasVariants: boole
     <button
       onClick={onTap}
       disabled={menu.is_sold_out}
-      className="flex min-h-[104px] flex-col justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 text-left transition-transform active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
+      className="flex flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] text-left transition-transform active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
     >
-      <div>
-        <span className="line-clamp-2 text-sm font-semibold text-[var(--ink)]">{menu.name}</span>
-        {hasVariants && !menu.is_sold_out && (
-          <span className="mt-1 block text-xs text-[var(--muted)]">pilih variasi</span>
+      <div className="relative flex h-20 items-center justify-center bg-[var(--surface-2)]">
+        {menu.image_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={menu.image_url} alt={menu.name} className="h-full w-full object-cover" />
+        ) : (
+          <UtensilsCrossed className="h-6 w-6 text-[var(--muted)]" />
+        )}
+        {menu.is_sold_out && (
+          <span className="absolute right-1.5 top-1.5 rounded-full bg-[var(--surface)]/90 px-2 py-0.5 text-[10px] font-semibold text-[var(--muted)]">
+            HABIS
+          </span>
+        )}
+        {discounted && !menu.is_sold_out && (
+          <span className="absolute left-1.5 top-1.5 rounded-full bg-[#fbe9e7] px-2 py-0.5 text-[10px] font-bold text-[#b23b2e]">
+            -{Math.round(((menu.price - menu.discount_price!) / menu.price) * 100)}%
+          </span>
         )}
       </div>
-
-      {menu.is_sold_out ? (
-        <span className="mt-2 self-start rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-xs font-semibold text-[var(--muted)]">
-          HABIS
-        </span>
-      ) : discounted ? (
-        <div className="mt-2 flex flex-wrap items-baseline gap-1.5">
-          <span className="text-xs text-[var(--muted)] line-through">{formatRupiah(menu.price)}</span>
-          <span className="text-sm font-bold text-[var(--primary)]">{formatRupiah(menu.discount_price!)}</span>
+      <div className="flex flex-1 flex-col justify-between p-3">
+        <div>
+          <span className="line-clamp-2 text-sm font-semibold text-[var(--ink)]">{menu.name}</span>
+          {hasVariants && !menu.is_sold_out && (
+            <span className="mt-1 block text-xs text-[var(--muted)]">pilih variasi</span>
+          )}
         </div>
-      ) : (
-        <span className="mt-2 text-sm font-bold text-[var(--primary)]">{formatRupiah(menu.price)}</span>
-      )}
+
+        {discounted ? (
+          <div className="mt-2 flex flex-wrap items-baseline gap-1.5">
+            <span className="text-xs text-[var(--muted)] line-through tabular-nums">{formatRupiah(menu.price)}</span>
+            <span className="text-sm font-bold text-[var(--primary)] tabular-nums">{formatRupiah(menu.discount_price!)}</span>
+          </div>
+        ) : (
+          <span className="mt-2 text-sm font-bold text-[var(--primary)] tabular-nums">{formatRupiah(menu.price)}</span>
+        )}
+      </div>
     </button>
   );
 }
@@ -453,7 +495,7 @@ function VariantModal({
 
   return (
     <Modal title={menu.name} onClose={onClose}>
-      <div className="space-y-5">
+      <div className="max-h-[55vh] space-y-5 overflow-y-auto pr-1">
         {groups.map((g) => (
           <fieldset key={g.id}>
             <legend className="mb-2 text-sm font-semibold text-[var(--ink)]">
@@ -497,30 +539,37 @@ function VariantModal({
             </div>
           </fieldset>
         ))}
-
-        {missingRequired.length > 0 && (
-          <p className="text-sm text-[var(--muted)]">
-            Wajib pilih: {missingRequired.map((g) => g.name).join(', ')}
-          </p>
-        )}
-
-        <Button
-          size="lg"
-          className="w-full"
-          disabled={missingRequired.length > 0}
-          onClick={() => onConfirm(chosen.map((o) => o.price_delta), chosen.map((o) => o.name).join(', ') || null)}
-        >
-          Tambah · {formatRupiah(unitPrice)}
-        </Button>
       </div>
+
+      {missingRequired.length > 0 && (
+        <p className="mt-3 text-sm text-[var(--muted)]">
+          Wajib pilih: {missingRequired.map((g) => g.name).join(', ')}
+        </p>
+      )}
+
+      <Button
+        size="lg"
+        className="mt-3 w-full"
+        disabled={missingRequired.length > 0}
+        onClick={() => onConfirm(chosen.map((o) => o.price_delta), chosen.map((o) => o.name).join(', ') || null)}
+      >
+        Tambah · {formatRupiah(unitPrice)}
+      </Button>
     </Modal>
   );
 }
 
 // ── Modal bayar (dengan pilih pelanggan) ──────────────────────────────────────
 
+/** Saran uang pasaran: uang pas + pecahan umum di atas total. */
+function cashSuggestions(total: number): number[] {
+  const notes = [5000, 10000, 20000, 50000, 100000];
+  const ups = notes.map((n) => Math.ceil(total / n) * n).filter((v) => v > total);
+  return [total, ...Array.from(new Set(ups))].slice(0, 4);
+}
+
 function PaymentModal({
-  total,
+  total: subtotal,
   initialCustomer,
   onClose,
   onConfirm,
@@ -528,13 +577,16 @@ function PaymentModal({
   total: number;
   initialCustomer: Customer | null;
   onClose: () => void;
-  onConfirm: (method: 'cash' | 'qris' | 'transfer', cashReceived: number | null, customer: Customer | null) => void;
+  onConfirm: (method: 'cash' | 'qris' | 'transfer', cashReceived: number | null, customer: Customer | null, discount: number) => void;
 }) {
   const [method, setMethod] = useState<'cash' | 'qris' | 'transfer'>('cash');
   const [cashInput, setCashInput] = useState('');
+  const [discountInput, setDiscountInput] = useState('');
   const [customer, setCustomer] = useState<Customer | null>(initialCustomer);
   const [pickCustomer, setPickCustomer] = useState(false);
 
+  const discount = Math.min(subtotal, parseInt(discountInput || '0', 10));
+  const total = subtotal - discount;
   const cashReceived = parseInt(cashInput || '0', 10);
   const change = Math.max(0, cashReceived - total);
   const canConfirm = method !== 'cash' || cashReceived >= total;
@@ -553,7 +605,25 @@ function PaymentModal({
 
   return (
     <Modal title="Bayar" onClose={onClose}>
-      <p className="mb-4 text-3xl font-bold text-[var(--ink)]">{formatRupiah(total)}</p>
+      {discount > 0 ? (
+        <div className="mb-4">
+          <p className="text-sm text-[var(--muted)] line-through tabular-nums">{formatRupiah(subtotal)}</p>
+          <p className="text-3xl font-bold text-[var(--ink)] tabular-nums">{formatRupiah(total)}</p>
+        </div>
+      ) : (
+        <p className="mb-4 text-3xl font-bold text-[var(--ink)] tabular-nums">{formatRupiah(total)}</p>
+      )}
+
+      <div className="mb-4">
+        <Field label="Diskon" hint="Opsional, potongan nominal Rp">
+          <Input
+            inputMode="numeric"
+            className="h-11"
+            value={formatThousands(discountInput)}
+            onChange={(e) => setDiscountInput(parseThousands(e.target.value))}
+          />
+        </Field>
+      </div>
 
       {/* Pelanggan — opsional, muncul di struk */}
       <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] p-3">
@@ -601,10 +671,23 @@ function PaymentModal({
               onChange={(e) => setCashInput(parseThousands(e.target.value))}
             />
           </Field>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {cashSuggestions(total).map((v, i) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setCashInput(String(v))}
+                className="rounded-full bg-[var(--surface-2)] px-3 py-1.5 text-sm font-semibold text-[var(--ink)] hover:bg-[var(--border)]"
+              >
+                {i === 0 ? 'Uang Pas' : formatRupiah(v)}
+              </button>
+            ))}
+          </div>
           {cashInput && (
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              Kembalian: <span className="font-semibold text-[var(--ink)]">{formatRupiah(change)}</span>
-            </p>
+            <div className="mt-2 inline-block rounded-lg bg-[var(--surface-2)] px-3 py-2">
+              <p className="text-xs text-[var(--muted)]">Kembalian</p>
+              <p className="text-sm font-bold text-[var(--ink)] tabular-nums">{formatRupiah(change)}</p>
+            </div>
           )}
         </div>
       )}
@@ -613,10 +696,31 @@ function PaymentModal({
         size="lg"
         className="w-full"
         disabled={!canConfirm}
-        onClick={() => onConfirm(method, method === 'cash' ? cashReceived : null, customer)}
+        onClick={() => onConfirm(method, method === 'cash' ? cashReceived : null, customer, discount)}
       >
         Konfirmasi Bayar
       </Button>
+    </Modal>
+  );
+}
+
+function ReceiptSuccessModal({ order, store, onClose }: { order: ReceiptOrder; store: ReceiptStore; onClose: () => void }) {
+  return (
+    <Modal title="Pembayaran Berhasil" onClose={onClose}>
+      <div className="py-2 text-center">
+        <p className="mb-1 text-sm text-[var(--muted)]">Total diterima</p>
+        <p className="mb-4 text-3xl font-bold text-[var(--ink)] tabular-nums">{formatRupiah(order.total)}</p>
+        {order.payment_method === 'cash' && (order.change_amount ?? 0) > 0 && (
+          <div className="mb-4 inline-block rounded-xl bg-[var(--surface-2)] px-4 py-3">
+            <p className="text-xs text-[var(--muted)]">Kembalian</p>
+            <p className="text-xl font-bold text-[var(--primary)] tabular-nums">{formatRupiah(order.change_amount!)}</p>
+          </div>
+        )}
+        <Button variant="outline" className="mb-2 w-full" onClick={() => printReceipt(order, store)}>
+          <Printer className="h-4 w-4" /> Cetak Struk
+        </Button>
+        <Button className="w-full" onClick={onClose}>Transaksi Berikutnya</Button>
+      </div>
     </Modal>
   );
 }
