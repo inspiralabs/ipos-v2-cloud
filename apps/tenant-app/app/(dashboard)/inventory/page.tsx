@@ -143,7 +143,11 @@ function RestockModal({ item, onClose, onSaved }: { item: StockLevel; onClose: (
             inputMode="numeric"
             className="h-11 text-center"
             value={qty}
-            onChange={(e) => setQty(Math.max(1, parseInt(e.target.value || '1', 10)))}
+            onChange={(e) => {
+              const digitsOnly = e.target.value.replace(/\D/g, '');
+              const parsed = parseInt(digitsOnly, 10);
+              setQty((q) => (Number.isNaN(parsed) ? q : Math.max(1, parsed)));
+            }}
           />
           <button
             onClick={() => setQty((q) => q + 1)}
