@@ -20,7 +20,7 @@ export function QtyStepper({
         type="button"
         aria-label="Kurangi"
         onClick={onDecrement}
-        className="flex h-11 w-11 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--ink)] hover:bg-[var(--surface-2)] active:scale-95"
+        className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--ink)] hover:bg-[var(--surface-2)] active:scale-95"
       >
         <Minus className="h-4 w-4" />
       </button>
@@ -37,7 +37,7 @@ export function QtyStepper({
         type="button"
         aria-label="Tambah"
         onClick={onIncrement}
-        className="flex h-11 w-11 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--ink)] hover:bg-[var(--surface-2)] active:scale-95"
+        className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--ink)] hover:bg-[var(--surface-2)] active:scale-95"
       >
         <Plus className="h-4 w-4" />
       </button>
