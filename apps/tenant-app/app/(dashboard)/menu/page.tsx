@@ -6,7 +6,6 @@ import { motion } from 'framer-motion';
 import { apiFetch, clearToken, getToken } from '@/lib/auth';
 import { formatRupiah, formatThousands, parseThousands } from '@/lib/format';
 import type { Category, Menu, MenuVariantGroup, VariantGroup } from '@/lib/types';
-import { ThemeToggle } from '@/components/ThemeToggle';
 import { useTenant } from '@/components/layout/TenantContext';
 import { SandboxLimitBanner } from '@/components/SandboxLimitBanner';
 import { MenuCard } from '@/components/menu/MenuCard';
@@ -105,7 +104,6 @@ export default function MenuPage() {
           <Button size="sm" onClick={() => setEditing('new')} disabled={sandboxLimitReached}>
             + Menu
           </Button>
-          <ThemeToggle />
         </div>
       </header>
 
@@ -153,6 +151,15 @@ export default function MenuPage() {
                     </motion.div>
                   );
                 })}
+                <button
+                  type="button"
+                  onClick={() => setEditing('new')}
+                  disabled={sandboxLimitReached}
+                  className="flex h-full min-h-[140px] flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-[var(--border)] text-sm font-medium text-[var(--muted)] transition-colors hover:bg-[var(--surface-2)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="text-xl">+</span>
+                  <span>Tambah</span>
+                </button>
               </motion.div>
             </section>
           ))
@@ -219,15 +226,18 @@ function MenuForm({
   const [name, setName] = useState(menu?.name ?? '');
   const [price, setPrice] = useState(String(menu?.price ?? ''));
   const [hasDiscount, setHasDiscount] = useState(menu?.discount_price != null);
-  const [discountPrice, setDiscountPrice] = useState(String(menu?.discount_price ?? ''));
+  const [discountType, setDiscountType] = useState<'nominal' | 'percent'>(menu?.discount_type ?? 'nominal');
+  const [discountValue, setDiscountValue] = useState(String(menu?.discount_value ?? ''));
   const [categoryId, setCategoryId] = useState(menu?.category_id ?? '');
   const [selectedGroups, setSelectedGroups] = useState<string[]>(linkedGroupIds);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const priceNum = parseInt(price || '0', 10);
-  const discountNum = parseInt(discountPrice || '0', 10);
-  const discountInvalid = hasDiscount && (discountNum <= 0 || discountNum >= priceNum);
+  const discountValueNum = parseInt(discountValue || '0', 10);
+  const discountNum =
+    discountType === 'percent' ? Math.round((priceNum * Math.min(100, discountValueNum)) / 100) : discountValueNum;
+  const discountInvalid = hasDiscount && (discountValueNum <= 0 || discountNum >= priceNum);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -238,7 +248,9 @@ function MenuForm({
       const body = {
         name,
         price: priceNum,
-        discount_price: hasDiscount ? discountNum : null,
+        discount_price: hasDiscount ? priceNum - discountNum : null,
+        discount_type: hasDiscount ? discountType : null,
+        discount_value: hasDiscount ? discountValueNum : null,
         category_id: categoryId || null,
       };
       const saved = menu
@@ -282,19 +294,39 @@ function MenuForm({
           </label>
 
           {hasDiscount && (
-            <div className="mt-3">
+            <div className="mt-3 space-y-2">
+              <div className="flex gap-2">
+                {(['nominal', 'percent'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setDiscountType(t)}
+                    className={`h-9 flex-1 rounded-lg text-sm font-semibold transition-colors ${
+                      discountType === t
+                        ? 'bg-[var(--primary)] text-[var(--primary-ink)]'
+                        : 'border border-[var(--border)] text-[var(--ink)] hover:bg-[var(--surface-2)]'
+                    }`}
+                  >
+                    {t === 'nominal' ? 'Rp' : '%'}
+                  </button>
+                ))}
+              </div>
               <Input
-                inputMode="numeric" placeholder="Harga setelah diskon"
-                value={formatThousands(discountPrice)} onChange={(e) => setDiscountPrice(parseThousands(e.target.value))}
+                inputMode="numeric"
+                placeholder={discountType === 'percent' ? 'Persen diskon (mis. 10)' : 'Potongan harga (Rp)'}
+                value={discountType === 'percent' ? discountValue : formatThousands(discountValue)}
+                onChange={(e) =>
+                  setDiscountValue(discountType === 'percent' ? e.target.value.replace(/\D/g, '') : parseThousands(e.target.value))
+                }
               />
               {discountInvalid ? (
-                <p className="mt-1 text-xs text-red-500">Harga diskon harus lebih kecil dari harga normal.</p>
+                <p className="text-xs text-red-500">Diskon harus membuat harga akhir lebih kecil dari harga normal.</p>
               ) : (
                 discountNum > 0 && (
-                  <p className="mt-2 text-xs text-[var(--muted)]">
+                  <p className="text-xs text-[var(--muted)]">
                     Tampil di kasir:{' '}
                     <span className="line-through">{formatRupiah(priceNum)}</span>{' '}
-                    <span className="font-semibold text-[var(--primary)]">{formatRupiah(discountNum)}</span>
+                    <span className="font-semibold text-[var(--primary)]">{formatRupiah(priceNum - discountNum)}</span>
                   </p>
                 )
               )}
@@ -516,7 +548,7 @@ function VariantGroupForm({
 
         <div>
           <span className="mb-2 block text-sm font-medium text-[var(--ink)]">Opsi & Selisih Harga</span>
-          <div className="space-y-2">
+          <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
             {options.map((opt, i) => (
               <div key={i} className="flex gap-2">
                 <Input
