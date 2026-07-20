@@ -716,6 +716,30 @@ function ReceiptSuccessModal({ order, store, onClose }: { order: ReceiptOrder; s
             <p className="text-xl font-bold text-[var(--primary)] tabular-nums">{formatRupiah(order.change_amount!)}</p>
           </div>
         )}
+
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">Preview Struk</p>
+        <div className="mb-4 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-2)] p-4 text-left font-mono text-[11px] leading-relaxed text-[var(--ink)]">
+          <p className="text-center font-bold">{store.name}</p>
+          {store.phone && <p className="text-center text-[var(--muted)]">{store.phone}</p>}
+          <div className="my-2 border-t border-dashed border-[var(--border)]" />
+          {order.table_number && <p>Meja: {order.table_number}</p>}
+          {order.customer_name && <p>Pelanggan: {order.customer_name}</p>}
+          <p>Kasir: {order.cashier_name}</p>
+          <div className="my-2 border-t border-dashed border-[var(--border)]" />
+          {order.items.map((item, i) => (
+            <div key={i} className="mb-1 flex justify-between gap-2">
+              <span className="min-w-0 flex-1 truncate">{item.product_name} x{item.qty}</span>
+              <span className="tabular-nums">{formatRupiah(item.price * item.qty)}</span>
+            </div>
+          ))}
+          <div className="my-2 border-t border-dashed border-[var(--border)]" />
+          <div className="flex justify-between font-bold">
+            <span>TOTAL</span>
+            <span className="tabular-nums">{formatRupiah(order.total)}</span>
+          </div>
+          <p className="mt-3 text-center text-[var(--primary)]">Terima kasih sudah berbelanja!</p>
+        </div>
+
         <Button variant="outline" className="mb-2 w-full" onClick={() => printReceipt(order, store)}>
           <Printer className="h-4 w-4" /> Cetak Struk
         </Button>
