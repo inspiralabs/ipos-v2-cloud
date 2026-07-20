@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+/* Brand default Inspira POS: maroon/gold/cream/charcoal. --primary bisa diganti owner (lihat hooks/useThemeColor.ts) — --accent tetap. */
+:root {
+  --bg: oklch(0.96 0.015 75);
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.94 0.02 75);
+  --border: oklch(0.89 0.025 75);
+  --ink: oklch(0.22 0 0);
+  --muted: oklch(0.5 0.02 60);
+  --primary: oklch(0.32 0.135 25);
+  --primary-ink: oklch(1 0 0);
+  --accent: oklch(0.74 0.12 75);
+  --accent-ink: oklch(0.22 0 0);
+  --nav-active: oklch(0.19 0.02 40); /* ink-fill #1a1310 setara — chip/tab/pill navigasi aktif, BUKAN maroon */
+  --nav-active-ink: oklch(1 0 0);
+
+  --status-trial: oklch(0.74 0.12 75);
+  --status-trial-ink: oklch(0.22 0 0);
+  --status-active: oklch(0.6 0.15 145);
+  --status-active-ink: oklch(1 0 0);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-ink: var(--primary-ink);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-nav-active: var(--nav-active);
+  --color-nav-active-ink: var(--nav-active-ink);
+}
+
+/* PRD tidak minta dark mode — infra toggle dibiarkan hidup (tidak dihapus), tapi nilainya sama seperti light. */
+[data-theme='dark'] {
+  --bg: oklch(0.96 0.015 75);
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.94 0.02 75);
+  --border: oklch(0.89 0.025 75);
+  --ink: oklch(0.22 0 0);
+  --muted: oklch(0.5 0.02 60);
+  --primary: oklch(0.32 0.135 25);
+  --primary-ink: oklch(1 0 0);
+  --nav-active: oklch(0.19 0.02 40);
+  --nav-active-ink: oklch(1 0 0);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: oklch(0.96 0.015 75);
+    --surface: oklch(1 0 0);
+    --surface-2: oklch(0.94 0.02 75);
+    --border: oklch(0.89 0.025 75);
+    --ink: oklch(0.22 0 0);
+    --muted: oklch(0.5 0.02 60);
+    --primary: oklch(0.32 0.135 25);
+    --primary-ink: oklch(1 0 0);
+    --nav-active: oklch(0.19 0.02 40);
+    --nav-active-ink: oklch(1 0 0);
+  }
+}
+
+* {
+  border-color: var(--border);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
