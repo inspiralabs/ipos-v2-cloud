@@ -12,6 +12,8 @@ export type Menu = {
   description: string | null;
   price: number;
   discount_price: number | null; // null = tanpa diskon; kalau ada, price jadi harga coret
+  discount_type: 'nominal' | 'percent' | null; // sumber kebenaran untuk form ubah — discount_price dihitung ulang darinya
+  discount_value: number | null; // nominal Rp, atau persen 0-100 (tergantung discount_type)
   image_url: string | null;
   is_active: boolean;
   is_sold_out: boolean;
