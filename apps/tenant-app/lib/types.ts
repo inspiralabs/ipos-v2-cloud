@@ -71,7 +71,7 @@ export function effectivePrice(menu: Menu) {
   return menu.discount_price ?? menu.price;
 }
 
-export type TenantPlan = 'umkm_lite' | 'umkm_pro' | 'resto_starter' | 'resto_pro' | 'resto_business';
+export type TenantPlan = 'umkm_lite' | 'umkm_pro' | 'resto_basic' | 'resto_starter' | 'resto_pro' | 'resto_business';
 export type TenantStatus = 'trial' | 'active' | 'suspended' | 'expired';
 
 /** Bentuk respons GET /api/v1/tenants/me. */
