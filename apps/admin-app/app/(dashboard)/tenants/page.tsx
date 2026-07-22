@@ -205,11 +205,42 @@ const PLAN_OPTIONS = [
   { value: 'resto_business', label: 'Resto Business' },
 ] as const;
 
+/** Add-on: fitur di luar bawaan tier, dinyalakan per tenant lewat tenant_feature_overrides.
+ * Key harus match salah satu feature_key di packages/shared/feature-gate.ts PLAN_FEATURES. */
+const ADDON_OPTIONS = [
+  { key: 'stock_management', label: 'Dashboard Stok Real-time' },
+  { key: 'advanced_report', label: 'Food Cost / HPP Otomatis' },
+  { key: 'qr_self_order', label: 'QR Self-Order' },
+  { key: 'kitchen_display', label: 'KDS Dapur' },
+  { key: 'loyalty_program', label: 'Loyalty Program' },
+  { key: 'inter_branch_transfer', label: 'Inter-branch Transfer' },
+  { key: 'absensi', label: 'Absensi Karyawan' },
+] as const;
+
 function EditTenantDialog({ tenant, open, onOpenChange }: { tenant: Tenant; open: boolean; onOpenChange: (o: boolean) => void }) {
   const qc = useQueryClient();
   const [name, setName] = useState(tenant.name);
   const knownPlan = PLAN_OPTIONS.some((p) => p.value === tenant.plan);
   const [plan, setPlan] = useState(tenant.plan);
+
+  const { data: overrides = [] } = useQuery({
+    queryKey: ['tenant-overrides', tenant.id],
+    queryFn: () => apiFetch(`/api/v1/admin/tenants/${tenant.id}/feature-overrides`),
+    enabled: open,
+  });
+  const overrideMap = new Map<string, boolean>(overrides.map((o: { feature_key: string; is_enabled: boolean }): [string, boolean] => [o.feature_key, o.is_enabled]));
+
+  const toggleAddon = useMutation({
+    mutationFn: ({ feature_key, is_enabled }: { feature_key: string; is_enabled: boolean }) =>
+      apiFetch(`/api/v1/admin/tenants/${tenant.id}/feature-overrides/${feature_key}`, {
+        method: 'PUT', body: JSON.stringify({ is_enabled }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tenant-overrides', tenant.id] });
+      toast.success('Add-on diperbarui');
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
 
   const mut = useMutation({
     mutationFn: async () => {
@@ -255,6 +286,25 @@ function EditTenantDialog({ tenant, open, onOpenChange }: { tenant: Tenant; open
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div>
+            <Label>Add-On</Label>
+            <p className="mb-2 text-xs text-[var(--muted)]">Fitur di luar paket, dinyalakan terpisah per tenant.</p>
+            <div className="space-y-2">
+              {ADDON_OPTIONS.map((addon) => {
+                const enabled = overrideMap.get(addon.key) ?? false;
+                return (
+                  <label key={addon.key} className="flex items-center justify-between rounded-lg border border-[var(--border)] px-3 py-2 text-sm">
+                    {addon.label}
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      onChange={(e) => toggleAddon.mutate({ feature_key: addon.key, is_enabled: e.target.checked })}
+                    />
+                  </label>
+                );
+              })}
+            </div>
           </div>
           <div className="flex gap-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">Batal</Button>
