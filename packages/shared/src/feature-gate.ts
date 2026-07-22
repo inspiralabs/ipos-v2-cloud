@@ -5,7 +5,7 @@ import type { TenantPlan } from './types.js';
 import type { Db } from './db.js';
 
 export const PLAN_FEATURES: Record<TenantPlan, string[]> = {
-  umkm_lite: ['basic_pos', 'basic_menu', 'basic_report', 'single_outlet'],
+  umkm_lite: ['basic_pos', 'basic_menu', 'basic_report', 'single_outlet', 'shift_management'],
   umkm_pro: [
     'basic_pos', 'basic_menu', 'basic_report', 'single_outlet',
     'stock_management', 'advanced_report', 'void_transaction', 'shift_management', 'split_bill',

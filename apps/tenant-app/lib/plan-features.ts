@@ -4,7 +4,7 @@ import type { TenantPlan } from './types';
 // package itu juga re-export db.ts/redis.ts (pg/ioredis), yang tidak boleh masuk bundle browser.
 // Kalau daftar fitur berubah di backend, update juga di sini.
 export const PLAN_FEATURES: Record<TenantPlan, string[]> = {
-  umkm_lite: ['basic_pos', 'basic_menu', 'basic_report', 'single_outlet'],
+  umkm_lite: ['basic_pos', 'basic_menu', 'basic_report', 'single_outlet', 'shift_management'],
   umkm_pro: [
     'basic_pos', 'basic_menu', 'basic_report', 'single_outlet',
     'stock_management', 'advanced_report', 'void_transaction', 'shift_management', 'split_bill',
