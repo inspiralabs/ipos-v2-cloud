@@ -1,0 +1,1 @@
+ALTER TABLE "inspirapos_v2"."tenant_feature_overrides" ADD CONSTRAINT "tenant_feature_overrides_tenant_id_feature_key_unique" UNIQUE("tenant_id","feature_key");

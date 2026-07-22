@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, text, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, timestamp, text, jsonb, unique } from 'drizzle-orm/pg-core';
 import { inspirapos, users } from './auth.js';
 
 export const tenants = inspirapos.table('tenants', {
@@ -39,7 +39,9 @@ export const tenant_feature_overrides = inspirapos.table('tenant_feature_overrid
   is_enabled: boolean('is_enabled').notNull(),
   set_by: uuid('set_by').references(() => users.id),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  tenantFeatureUnique: unique('tenant_feature_overrides_tenant_id_feature_key_unique').on(table.tenant_id, table.feature_key),
+}));
 
 // Buku alamat pelanggan toko — nama + no HP, dipilih opsional saat transaksi (nama muncul di struk).
 export const customers = inspirapos.table('customers', {
