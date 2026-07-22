@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
-import { tenants, users } from '@ipos-cloud/drizzle-schema';
+import { tenants, users, tenant_feature_overrides } from '@ipos-cloud/drizzle-schema';
 import { tenantGuard } from '../../middleware/admin-guard.js';
 
 // Dipakai tenant-app: dashboard toko login dengan JWT tenant_id (bukan admin).
@@ -16,6 +16,12 @@ export async function tenantMeRoutes(app: FastifyInstance) {
     const [user] = await db.select({ id: users.id, name: users.name, email: users.email, role: users.role })
       .from(users).where(eq(users.id, sub)).limit(1);
 
+    const overrideRows = await db
+      .select({ feature_key: tenant_feature_overrides.feature_key, is_enabled: tenant_feature_overrides.is_enabled })
+      .from(tenant_feature_overrides)
+      .where(eq(tenant_feature_overrides.tenant_id, tenant_id));
+    const feature_overrides = Object.fromEntries(overrideRows.map((r: { feature_key: string; is_enabled: boolean }) => [r.feature_key, r.is_enabled]));
+
     return {
       id: tenant.id,
       name: tenant.name,
@@ -29,6 +35,7 @@ export async function tenantMeRoutes(app: FastifyInstance) {
       theme_color: tenant.theme_color,
       address: tenant.address,
       phone: tenant.phone,
+      feature_overrides,
       user,
     };
   });
