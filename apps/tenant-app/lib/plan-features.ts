@@ -33,6 +33,12 @@ export const PLAN_FEATURES: Record<TenantPlan, string[]> = {
   ],
 };
 
-export function hasFeature(plan: TenantPlan | undefined | null, featureKey: string) {
-  return !!plan && (PLAN_FEATURES[plan]?.includes(featureKey) ?? false);
+export function hasFeature(
+  plan: TenantPlan | undefined | null,
+  featureKey: string,
+  overrides?: Record<string, boolean>
+) {
+  if (!plan) return false;
+  if (overrides && featureKey in overrides) return overrides[featureKey];
+  return PLAN_FEATURES[plan]?.includes(featureKey) ?? false;
 }

@@ -91,4 +91,5 @@ export type Tenant = {
   address: string | null;
   phone: string | null;
   user: { id: string; name: string; email: string; role: string };
+  feature_overrides: Record<string, boolean>;
 };
