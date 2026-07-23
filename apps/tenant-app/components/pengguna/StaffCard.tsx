@@ -19,17 +19,18 @@ export function StaffCard({
   onDelete: () => void;
 }) {
   return (
-    <motion.div layout className="group relative flex flex-col items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-center shadow-sm">
+    <motion.div layout className="group relative flex w-full flex-col items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-center shadow-sm">
       <Avatar name={cashier.name} size="lg" />
-      <div>
+      <div className="w-full min-w-0">
         <p className="truncate text-sm font-semibold text-[var(--ink)]">{cashier.name}</p>
         <p className="truncate text-xs text-[var(--muted)]">{cashier.email}</p>
       </div>
       {!cashier.is_active && <Badge variant="neutral">Nonaktif</Badge>}
-      <div className="flex w-full items-center justify-center gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
+      <div className="flex w-full flex-wrap items-center justify-center gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
         <button
           type="button"
           aria-label="Reset password"
+          title="Reset password"
           onClick={onResetPassword}
           className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--ink)] hover:bg-[var(--surface-2)] active:scale-95"
         >
@@ -38,6 +39,7 @@ export function StaffCard({
         <button
           type="button"
           aria-label={cashier.is_active ? 'Nonaktifkan' : 'Aktifkan'}
+          title={cashier.is_active ? 'Nonaktifkan' : 'Aktifkan'}
           onClick={onToggleActive}
           className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--ink)] hover:bg-[var(--surface-2)] active:scale-95"
         >
@@ -46,6 +48,7 @@ export function StaffCard({
         <button
           type="button"
           aria-label="Hapus kasir"
+          title="Hapus kasir"
           onClick={onDelete}
           className="flex h-11 w-11 items-center justify-center rounded-full text-red-500 hover:bg-red-500/10 active:scale-95"
         >

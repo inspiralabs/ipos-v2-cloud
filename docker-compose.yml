@@ -1,0 +1,189 @@
+services:
+  redis:
+    image: redis:7-alpine
+    # ponytail: tidak di-expose ke host — cuma dipakai antar-container lewat redis://redis:6379.
+    # Kalau perlu redis-cli dari host, `docker compose exec redis redis-cli`.
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: auth-service
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      NODE_ENV: production
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  tenant-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: tenant-service
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      OFFLINE_LICENSE_SALT_LITE: ${OFFLINE_LICENSE_SALT_LITE}
+      OFFLINE_LICENSE_SALT_PRO: ${OFFLINE_LICENSE_SALT_PRO}
+      AUTH_SERVICE_URL: http://auth-service:3001
+      NOTIFICATION_SERVICE_URL: http://notification-service:3009
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      FONNTE_TOKEN: ${FONNTE_TOKEN}
+    depends_on:
+      - auth-service
+      - notification-service
+    restart: unless-stopped
+
+  pos-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: pos-service
+    ports: ["3003:3003"]
+    environment:
+      PORT: 3003
+      DATABASE_URL: "${DATABASE_URL}"
+      JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}"
+      KITCHEN_SERVICE_URL: http://kitchen-service:3006
+      INVENTORY_SERVICE_URL: http://inventory-service:3005
+      CATALOG_SERVICE_URL: http://catalog-service:3004
+      TABLE_SERVICE_URL: http://table-service:3007
+      INTERNAL_API_KEY: "${INTERNAL_API_KEY}"
+    restart: unless-stopped
+
+  catalog-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: catalog-service
+    ports: ["3004:3004"]
+    environment:
+      PORT: 3004
+      DATABASE_URL: "${DATABASE_URL}"
+      JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}"
+      TABLE_SERVICE_URL: http://table-service:3007
+    restart: unless-stopped
+
+  inventory-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: inventory-service
+    ports: ["3005:3005"]
+    environment: { PORT: 3005, DATABASE_URL: "${DATABASE_URL}", JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}", INTERNAL_API_KEY: "${INTERNAL_API_KEY}" }
+    restart: unless-stopped
+
+  kitchen-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: kitchen-service
+    ports: ["3006:3006"]
+    environment:
+      PORT: 3006
+      DATABASE_URL: "${DATABASE_URL}"
+      JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}"
+      REDIS_URL: redis://redis:6379
+      INTERNAL_API_KEY: "${INTERNAL_API_KEY}"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  table-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: table-service
+    ports: ["3007:3007"]
+    environment:
+      PORT: 3007
+      DATABASE_URL: "${DATABASE_URL}"
+      JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}"
+      REDIS_URL: redis://redis:6379
+      PUBLIC_ORDER_URL: "${PUBLIC_ORDER_URL:-http://localhost:3100/order}"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  report-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: report-service
+    ports: ["3008:3008"]
+    environment: { PORT: 3008, DATABASE_URL: "${DATABASE_URL}", JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}" }
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: notification-service
+    ports: ["3009:3009"]
+    environment:
+      PORT: 3009
+      DATABASE_URL: ${DATABASE_URL}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      FONNTE_TOKEN: ${FONNTE_TOKEN}
+    restart: unless-stopped
+
+  websocket-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: websocket-gateway
+    ports: ["3011:3011"]
+    environment:
+      PORT: 3011
+      JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}"
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - auth-service
+      - tenant-service
+    restart: unless-stopped
+
+volumes:
+  redis_data:

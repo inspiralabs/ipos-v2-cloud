@@ -1,0 +1,23 @@
+{
+  "name": "websocket-gateway",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "fastify": "^5.0.0",
+    "@fastify/cors": "^11.0.0",
+    "@fastify/jwt": "^10.1.0",
+    "@fastify/websocket": "^11.0.0",
+    "@ipos-cloud/shared": "workspace:*",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "tsx": "^4.11.0",
+    "@types/node": "^22.0.0"
+  }
+}

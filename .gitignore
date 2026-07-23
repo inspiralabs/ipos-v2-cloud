@@ -1,0 +1,23 @@
+node_modules/
+dist/
+
+# Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+keys/
+
+# Next.js (admin-app)
+.next/
+out/
+
+# Logs
+*.log
+logs/
+
+# Misc
+.DS_Store
+Thumbs.db
+coverage/
+.turbo/

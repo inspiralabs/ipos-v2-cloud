@@ -1,0 +1,24 @@
+{
+  "name": "ipos-cloud",
+  "private": true,
+  "scripts": {
+    "dev:auth": "pnpm --filter auth-service dev",
+    "dev:tenant": "pnpm --filter tenant-service dev",
+    "dev:catalog": "pnpm --filter catalog-service dev",
+    "dev:pos": "pnpm --filter pos-service dev",
+    "dev:inventory": "pnpm --filter inventory-service dev",
+    "dev:kitchen": "pnpm --filter kitchen-service dev",
+    "dev:table": "pnpm --filter table-service dev",
+    "dev:report": "pnpm --filter report-service dev",
+    "dev:notification": "pnpm --filter notification-service dev",
+    "dev:ws": "pnpm --filter websocket-gateway dev",
+    "build:packages": "pnpm --filter @ipos-cloud/drizzle-schema build && pnpm --filter @ipos-cloud/shared build",
+    "build": "pnpm -r build",
+    "type-check": "pnpm -r type-check",
+    "db:generate": "pnpm --filter @ipos-cloud/drizzle-schema db:generate",
+    "db:migrate": "pnpm --filter @ipos-cloud/drizzle-schema db:migrate"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

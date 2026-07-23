@@ -29,6 +29,9 @@ import { publicOfflineRoutes } from './routes/public/offline.js';
 import { tenantMeRoutes } from './routes/tenant/me.js';
 import { tenantUsersRoutes } from './routes/tenant/users.js';
 import { tenantCustomersRoutes } from './routes/tenant/customers.js';
+import { tenantBranchesRoutes, tenantTransfersRoutes } from './routes/tenant/branches.js';
+import { tenantAttendanceRoutes } from './routes/tenant/attendance.js';
+import { tenantLoyaltyRoutes } from './routes/tenant/loyalty.js';
 
 app.register(tenantsAdminRoutes, { prefix: '/api/v1/admin/tenants' });
 app.register(featureOverridesAdminRoutes, { prefix: '/api/v1/admin/tenants' });
@@ -45,6 +48,10 @@ app.register(publicOfflineRoutes, { prefix: '/api/clients' });
 app.register(tenantMeRoutes, { prefix: '/api/v1/tenants' });
 app.register(tenantUsersRoutes, { prefix: '/api/v1/tenants/users' });
 app.register(tenantCustomersRoutes, { prefix: '/api/v1/tenants/customers' });
+app.register(tenantBranchesRoutes, { prefix: '/api/v1/tenants/branches' });
+app.register(tenantTransfersRoutes, { prefix: '/api/v1/tenants/transfers' });
+app.register(tenantAttendanceRoutes, { prefix: '/api/v1/tenants/attendance' });
+app.register(tenantLoyaltyRoutes, { prefix: '/api/v1/tenants/loyalty' });
 
 app.setErrorHandler((error: Error & { statusCode?: number; code?: string }, _request, reply) => {
   app.log.error(error);

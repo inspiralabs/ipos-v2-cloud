@@ -5,7 +5,10 @@ import jwt from '@fastify/jwt';
 import { z } from 'zod';
 import { and, eq, between, sql } from 'drizzle-orm';
 import { createDb, requireFeature } from '@ipos-cloud/shared';
-import { pos_orders, pos_order_items, menus } from '@ipos-cloud/drizzle-schema';
+import {
+  pos_orders, pos_order_items, menus,
+  recipe_items, ingredients, operational_expenses, ingredient_waste_logs,
+} from '@ipos-cloud/drizzle-schema';
 import { parseRange } from './date-range.js';
 import { bucketLabel, type Granularity } from './timeseries.js';
 
@@ -238,6 +241,183 @@ app.get('/api/v1/reports/timeseries', { preHandler: requireAuth }, async (req) =
     .map(([bucket, v]) => ({ bucket, ...v }))
     .sort((a, b) => a.bucket.localeCompare(b.bucket));
 });
+
+// ── GET /api/v1/reports/food-cost (Resto Pro & Business) ─────────────────────
+// HPP per menu = sum(qty_used * cost_per_unit) dari resep — menu tanpa resep di-skip (belum di-BOM-kan).
+
+app.get(
+  '/api/v1/reports/food-cost',
+  { preHandler: [requireAuth, requireFeature('food_cost_report')] },
+  async (req) => {
+    const user = jwtUser(req);
+    const recipeRows = await db
+      .select({
+        menu_id: recipe_items.menu_id,
+        cost: sql<number>`sum(${recipe_items.qty_used} * ${ingredients.cost_per_unit})`,
+      })
+      .from(recipe_items)
+      .innerJoin(ingredients, eq(recipe_items.ingredient_id, ingredients.id))
+      .where(eq(recipe_items.tenant_id, user.tenant_id))
+      .groupBy(recipe_items.menu_id);
+
+    const menuRows = await db.select({ id: menus.id, name: menus.name, price: menus.price })
+      .from(menus).where(and(eq(menus.tenant_id, user.tenant_id), eq(menus.is_active, true)));
+    const costByMenu = new Map(recipeRows.map((r) => [r.menu_id, Number(r.cost)]));
+
+    return menuRows
+      .filter((m) => costByMenu.has(m.id))
+      .map((m) => {
+        const hpp = costByMenu.get(m.id)!;
+        const ratio = m.price > 0 ? Math.round((hpp / m.price) * 100) : 0;
+        return { menu_id: m.id, menu_name: m.name, hpp, price: m.price, ratio_percent: ratio, over_threshold: ratio > 35 };
+      })
+      .sort((a, b) => b.ratio_percent - a.ratio_percent);
+  }
+);
+
+// ── GET /api/v1/reports/waste (Resto Pro & Business) ──────────────────────────
+
+app.get(
+  '/api/v1/reports/waste',
+  { preHandler: [requireAuth, requireFeature('food_cost_report')] },
+  async (req) => {
+    const { from, to } = dateRangeQuery.parse(req.query);
+    const user = jwtUser(req);
+    const { fromDate, toDate } = parseRange(from, to);
+
+    const rows = await db
+      .select({
+        id: ingredient_waste_logs.id,
+        ingredient_name: ingredients.name,
+        qty: ingredient_waste_logs.qty,
+        unit: ingredients.unit,
+        estimated_value: ingredient_waste_logs.estimated_value,
+        reason: ingredient_waste_logs.reason,
+        created_at: ingredient_waste_logs.created_at,
+      })
+      .from(ingredient_waste_logs)
+      .innerJoin(ingredients, eq(ingredient_waste_logs.ingredient_id, ingredients.id))
+      .where(and(eq(ingredient_waste_logs.tenant_id, user.tenant_id), between(ingredient_waste_logs.created_at, fromDate, toDate)))
+      .orderBy(sql`${ingredient_waste_logs.created_at} desc`);
+
+    return { items: rows, total_value: rows.reduce((sum, r) => sum + r.estimated_value, 0) };
+  }
+);
+
+// ── GET /api/v1/reports/pnl (Resto Pro & Business) ─────────────────────────────
+// Laba rugi sederhana: Pendapatan - COGS (HPP terjual) - Operasional = Laba Bersih.
+
+app.get(
+  '/api/v1/reports/pnl',
+  { preHandler: [requireAuth, requireFeature('pnl_report')] },
+  async (req) => {
+    const { from, to } = dateRangeQuery.parse(req.query);
+    const user = jwtUser(req);
+    const { fromDate, toDate } = parseRange(from, to);
+
+    const [{ revenue }] = await db
+      .select({ revenue: sql<number>`coalesce(sum(${pos_orders.total}), 0)` })
+      .from(pos_orders)
+      .where(and(eq(pos_orders.tenant_id, user.tenant_id), eq(pos_orders.status, 'paid'), between(pos_orders.created_at, fromDate, toDate)));
+
+    const soldItems = await db
+      .select({ menu_id: pos_order_items.menu_id, qty: pos_order_items.qty })
+      .from(pos_order_items)
+      .innerJoin(pos_orders, eq(pos_order_items.order_id, pos_orders.id))
+      .where(and(eq(pos_orders.tenant_id, user.tenant_id), eq(pos_orders.status, 'paid'), between(pos_orders.created_at, fromDate, toDate)));
+
+    const hppByMenu = await db
+      .select({ menu_id: recipe_items.menu_id, cost: sql<number>`sum(${recipe_items.qty_used} * ${ingredients.cost_per_unit})` })
+      .from(recipe_items)
+      .innerJoin(ingredients, eq(recipe_items.ingredient_id, ingredients.id))
+      .where(eq(recipe_items.tenant_id, user.tenant_id))
+      .groupBy(recipe_items.menu_id);
+    const hppMap = new Map(hppByMenu.map((r) => [r.menu_id, Number(r.cost)]));
+    const cogs = soldItems.reduce((sum, item) => sum + (item.menu_id ? (hppMap.get(item.menu_id) ?? 0) * item.qty : 0), 0);
+
+    const [{ operational }] = await db
+      .select({ operational: sql<number>`coalesce(sum(${operational_expenses.amount}), 0)` })
+      .from(operational_expenses)
+      .where(and(eq(operational_expenses.tenant_id, user.tenant_id), between(operational_expenses.spent_at, from, to)));
+
+    const rev = Number(revenue);
+    const op = Number(operational);
+    return { revenue: rev, cogs, operational: op, net_profit: rev - cogs - op };
+  }
+);
+
+// ── GET /api/v1/reports/cashflow (Resto Pro & Business) ────────────────────────
+
+app.get(
+  '/api/v1/reports/cashflow',
+  { preHandler: [requireAuth, requireFeature('pnl_report')] },
+  async (req) => {
+    const { from, to } = dateRangeQuery.parse(req.query);
+    const user = jwtUser(req);
+    const { fromDate, toDate } = parseRange(from, to);
+
+    const cashIn = await db
+      .select({ payment_method: pos_orders.payment_method, total: sql<number>`coalesce(sum(${pos_orders.total}), 0)` })
+      .from(pos_orders)
+      .where(and(eq(pos_orders.tenant_id, user.tenant_id), eq(pos_orders.status, 'paid'), between(pos_orders.created_at, fromDate, toDate)))
+      .groupBy(pos_orders.payment_method);
+
+    const cashOut = await db
+      .select({ category: operational_expenses.category, total: sql<number>`coalesce(sum(${operational_expenses.amount}), 0)` })
+      .from(operational_expenses)
+      .where(and(eq(operational_expenses.tenant_id, user.tenant_id), between(operational_expenses.spent_at, from, to)))
+      .groupBy(operational_expenses.category);
+
+    const totalIn = cashIn.reduce((sum, r) => sum + Number(r.total), 0);
+    const totalOut = cashOut.reduce((sum, r) => sum + Number(r.total), 0);
+    return {
+      cash_in: cashIn.map((r) => ({ payment_method: r.payment_method, total: Number(r.total) })),
+      cash_out: cashOut.map((r) => ({ category: r.category, total: Number(r.total) })),
+      total_in: totalIn,
+      total_out: totalOut,
+      saldo_akhir: totalIn - totalOut,
+    };
+  }
+);
+
+// Catat pengeluaran operasional manual (gaji, sewa, dll) — dasar untuk P&L & cashflow.
+const expenseBody = z.object({
+  category: z.enum(['gaji', 'sewa', 'listrik', 'bahan_baku', 'lainnya']),
+  amount: z.number().int().positive(),
+  note: z.string().nullable().optional(),
+  spent_at: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  outlet_id: z.string().uuid().nullable().optional(),
+});
+
+app.post(
+  '/api/v1/reports/expenses',
+  { preHandler: [requireAuth, requireFeature('pnl_report')] },
+  async (req, reply) => {
+    const body = expenseBody.parse(req.body);
+    const user = jwtUser(req);
+    const [row] = await db.insert(operational_expenses).values({ ...body, tenant_id: user.tenant_id, created_by: user.sub }).returning();
+    return reply.code(201).send(row);
+  }
+);
+
+// Catat waste bahan baku (kadaluarsa/rusak/salah masak) — dipakai Laporan Waste.
+const wasteBody = z.object({
+  ingredient_id: z.string().uuid(),
+  qty: z.number().int().positive(),
+  estimated_value: z.number().int().min(0),
+  reason: z.string().max(100).nullable().optional(),
+});
+
+app.post(
+  '/api/v1/reports/waste',
+  { preHandler: [requireAuth, requireFeature('food_cost_report')] },
+  async (req, reply) => {
+    const body = wasteBody.parse(req.body);
+    const user = jwtUser(req);
+    const [row] = await db.insert(ingredient_waste_logs).values({ ...body, tenant_id: user.tenant_id, recorded_by: user.sub }).returning();
+    return reply.code(201).send(row);
+  }
+);
 
 app.setErrorHandler((error: Error & { statusCode?: number; code?: string }, _req, reply) => {
   app.log.error(error);
