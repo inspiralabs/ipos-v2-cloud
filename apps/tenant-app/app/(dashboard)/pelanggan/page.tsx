@@ -12,10 +12,35 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StaffCard } from '@/components/pengguna/StaffCard';
 import { PasswordInput } from '@/components/ui/password-input';
 
-type Cashier = { id: string; name: string; email: string; role: string; is_active: boolean };
+type StaffRole = 'cashier' | 'outlet_manager' | 'kitchen_staff' | 'waiter' | 'manager';
+
+type Cashier = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+  phone?: string | null;
+  outlet_id?: string | null;
+  has_pin?: boolean;
+};
+
+type Outlet = { id: string; name: string };
+
+type AttendanceToday = { user_id: string; status: 'hadir' | 'telat' | 'alpha' };
+
+// Pill-select posisi (PRD): Kasir/Dapur/Waiter/Manager. outlet_manager tetap ada di backend
+// tapi tidak ditawarkan sebagai pilihan baru di form — dipertahankan hanya untuk staf existing.
+const POSITION_OPTIONS: { value: StaffRole; label: string }[] = [
+  { value: 'cashier', label: 'Kasir' },
+  { value: 'kitchen_staff', label: 'Dapur' },
+  { value: 'waiter', label: 'Waiter' },
+  { value: 'manager', label: 'Manajer' },
+];
 
 function avatarColor(name: string) {
   const colors = ['#6e150f', '#8a2015', '#5fa876', '#d0a139', '#4a5b8a'];
@@ -23,16 +48,23 @@ function avatarColor(name: string) {
   return colors[idx];
 }
 
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default function PelangganPage() {
   const [tab, setTab] = useState<'pelanggan' | 'staf'>('pelanggan');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [cashiers, setCashiers] = useState<Cashier[]>([]);
+  const [outlets, setOutlets] = useState<Outlet[]>([]);
+  const [attendanceToday, setAttendanceToday] = useState<AttendanceToday[]>([]);
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Customer | 'new' | null>(null);
   const [removing, setRemoving] = useState<Customer | null>(null);
   const [detail, setDetail] = useState<Customer | null>(null);
   const [addingCashier, setAddingCashier] = useState(false);
   const [resetting, setResetting] = useState<Cashier | null>(null);
+  const [settingPin, setSettingPin] = useState<Cashier | null>(null);
   const [removingCashier, setRemovingCashier] = useState<Cashier | null>(null);
   const [error, setError] = useState('');
 
@@ -48,6 +80,10 @@ export default function PelangganPage() {
   useEffect(() => {
     reloadCustomers().catch((e) => setError(e.message));
     reloadCashiers().catch(() => {});
+    // Outlet dan absensi bersifat pelengkap (multi_outlet/absensi mungkin tidak aktif untuk tenant
+    // ini) — gagal diam-diam saja, jangan blok halaman kelola staf.
+    apiFetch('/api/v1/tenants/branches').then((res) => setOutlets(res.data)).catch(() => {});
+    apiFetch(`/api/v1/tenants/attendance?date=${todayStr()}`).then((res) => setAttendanceToday(res.data)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -134,15 +170,23 @@ export default function PelangganPage() {
         <EmptyState>Belum ada kasir. Klik + Kasir untuk menambah.</EmptyState>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {cashiers.map((c) => (
-            <StaffCard
-              key={c.id}
-              cashier={c}
-              onResetPassword={() => setResetting(c)}
-              onToggleActive={() => toggleCashierActive(c)}
-              onDelete={() => setRemovingCashier(c)}
-            />
-          ))}
+          {cashiers.map((c) => {
+            const outletName = c.outlet_id ? outlets.find((o) => o.id === c.outlet_id)?.name : null;
+            const today = attendanceToday.find((a) => a.user_id === c.id);
+            const attendanceStatus = today ? (today.status === 'alpha' ? undefined : today.status) : c.is_active ? 'belum' : undefined;
+            return (
+              <StaffCard
+                key={c.id}
+                cashier={c}
+                outletName={outletName}
+                attendanceStatus={attendanceStatus}
+                onResetPassword={() => setResetting(c)}
+                onSetPin={() => setSettingPin(c)}
+                onToggleActive={() => toggleCashierActive(c)}
+                onDelete={() => setRemovingCashier(c)}
+              />
+            );
+          })}
         </div>
       )}
 
@@ -170,9 +214,12 @@ export default function PelangganPage() {
       </AlertDialog>
 
       {addingCashier && (
-        <CashierForm onClose={() => setAddingCashier(false)} onSaved={async () => { setAddingCashier(false); await reloadCashiers(); }} />
+        <CashierForm outlets={outlets} onClose={() => setAddingCashier(false)} onSaved={async () => { setAddingCashier(false); await reloadCashiers(); }} />
       )}
       {resetting && <ResetPasswordForm cashier={resetting} onClose={() => setResetting(null)} />}
+      {settingPin && (
+        <PinForm cashier={settingPin} onClose={() => setSettingPin(null)} onSaved={async () => { setSettingPin(null); await reloadCashiers(); }} />
+      )}
 
       <AlertDialog open={!!removingCashier} onOpenChange={(open) => !open && setRemovingCashier(null)}>
         <AlertDialogContent>
@@ -299,10 +346,14 @@ function CustomerDetailModal({ customer, onClose }: { customer: Customer; onClos
   );
 }
 
-function CashierForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function CashierForm({ outlets, onClose, onSaved }: { outlets: Outlet[]; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
+  const [role, setRole] = useState<StaffRole>('cashier');
+  const [outletId, setOutletId] = useState<string>('');
+  const [pin, setPin] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -311,7 +362,18 @@ function CashierForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
     setSaving(true);
     setError('');
     try {
-      await apiFetch('/api/v1/tenants/users', { method: 'POST', body: JSON.stringify({ name, email, password, role: 'cashier' }) });
+      await apiFetch('/api/v1/tenants/users', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          role,
+          phone: phone || undefined,
+          outlet_id: outletId || undefined,
+          pin: pin || undefined,
+        }),
+      });
       onSaved();
     } catch (e: any) {
       setError(e.message);
@@ -320,11 +382,52 @@ function CashierForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   }
 
   return (
-    <Modal title="Tambah Kasir" onClose={onClose}>
+    <Modal title="Tambah Staf" onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <Field label="Nama karyawan"><Input required autoFocus value={name} onChange={(e) => setName(e.target.value)} /></Field>
         <Field label="Email untuk login"><Input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+        <Field label="No. HP" hint="Opsional"><Input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+
+        <Field label="Posisi">
+          <div className="flex flex-wrap gap-2">
+            {POSITION_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setRole(opt.value)}
+                className={`h-10 rounded-full px-4 text-sm font-medium ${role === opt.value ? 'bg-[var(--nav-active)] text-[var(--nav-active-ink)]' : 'border border-[var(--border)] text-[var(--ink)]'}`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        {outlets.length > 0 && (
+          <Field label="Cabang" hint="Opsional — kosongkan kalau belum ditentukan">
+            <Select value={outletId} onValueChange={setOutletId}>
+              <SelectTrigger><SelectValue placeholder="Pilih cabang" /></SelectTrigger>
+              <SelectContent>
+                {outlets.map((o) => (
+                  <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        )}
+
         <Field label="Password awal" hint="Bisa diganti nanti lewat Reset Password."><PasswordInput required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+
+        <Field label="PIN 4 digit" hint="Opsional — untuk login cepat di POS. Bisa diatur belakangan lewat tombol Ubah PIN.">
+          <Input
+            inputMode="numeric"
+            maxLength={4}
+            placeholder="••••"
+            value={pin}
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+          />
+        </Field>
+
         {error && <p className="text-sm text-red-500">{error}</p>}
         <div className="flex gap-3 pt-2">
           <Button type="button" variant="outline" onClick={onClose} className="flex-1">Batal</Button>
@@ -371,6 +474,49 @@ function ResetPasswordForm({ cashier, onClose }: { cashier: Cashier; onClose: ()
           </div>
         </form>
       )}
+    </Modal>
+  );
+}
+
+function PinForm({ cashier, onClose, onSaved }: { cashier: Cashier; onClose: () => void; onSaved: () => void }) {
+  const [pin, setPin] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      await apiFetch(`/api/v1/tenants/users/${cashier.id}/pin`, { method: 'PATCH', body: JSON.stringify({ pin }) });
+      onSaved();
+    } catch (e: any) {
+      setError(e.message);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title={`Ubah PIN — ${cashier.name}`} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <Field label="PIN baru" hint="4 digit angka, dipakai untuk login cepat di POS/kiosk absensi.">
+          <Input
+            required
+            autoFocus
+            inputMode="numeric"
+            maxLength={4}
+            pattern="\d{4}"
+            placeholder="••••"
+            value={pin}
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+          />
+        </Field>
+        {error && <p className="text-sm text-red-500">{error}</p>}
+        <div className="flex gap-3 pt-2">
+          <Button type="button" variant="outline" onClick={onClose} className="flex-1">Batal</Button>
+          <Button type="submit" disabled={saving || pin.length !== 4} className="flex-1">{saving ? 'Menyimpan...' : 'Simpan PIN'}</Button>
+        </div>
+      </form>
     </Modal>
   );
 }
