@@ -15,6 +15,8 @@ export const tenants = inspirapos.table('tenants', {
   theme_color: varchar('theme_color', { length: 10 }).notNull().default('4'), // hue preset (lihat tenant-app hooks/useThemeColor.ts) — '4' = maroon default
   address: text('address'),
   phone: varchar('phone', { length: 20 }),
+  qris_url: varchar('qris_url', { length: 500 }),
+  receipt_footer: varchar('receipt_footer', { length: 200 }),
   setup_completed_at: timestamp('setup_completed_at', { withTimezone: true }),
   notes: text('notes'),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

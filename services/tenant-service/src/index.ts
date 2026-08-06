@@ -2,7 +2,8 @@ import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
-import { createDb } from '@ipos-cloud/shared';
+import multipart from '@fastify/multipart';
+import { createDb, createR2Client } from '@ipos-cloud/shared';
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info' } });
 
@@ -10,9 +11,11 @@ app.register(cors, { origin: process.env.CORS_ORIGIN || true, credentials: true 
 app.register(jwt, {
   secret: { public: process.env.JWT_PUBLIC_KEY!.replace(/\\n/g, '\n') },
 });
+app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } });
 
 const db = createDb(process.env.DATABASE_URL!);
 app.decorate('db', db);
+app.decorate('r2', createR2Client());
 
 app.get('/health', async () => ({ status: 'ok', service: 'tenant-service', version: '0.1.0' }));
 

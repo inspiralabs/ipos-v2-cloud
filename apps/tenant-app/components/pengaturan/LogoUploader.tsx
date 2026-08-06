@@ -1,13 +1,14 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { Camera } from 'lucide-react';
 import { Avatar } from '@/components/Avatar';
 
-// ponytail: tidak ada endpoint upload storage di backend (Supabase Storage/S3) saat ini —
-// komponen ini hanya menampilkan preview lokal via URL.createObjectURL dan meneruskan
-// File terpilih ke onFileSelected. Sambungkan ke endpoint upload nyata begitu tersedia;
-// sampai saat itu, parent boleh no-op + toast "belum tersedia".
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_SIZE = 5 * 1024 * 1024;
+
+// Preview instan via URL.createObjectURL, upload sesungguhnya (ke R2) ditangani parent lewat onFileSelected.
 export function LogoUploader({
   currentUrl,
   storeName,
@@ -22,7 +23,16 @@ export function LogoUploader({
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      toast.error('Format harus JPG, PNG, atau WEBP');
+      return;
+    }
+    if (file.size > MAX_SIZE) {
+      toast.error('Ukuran gambar maksimal 5 MB');
+      return;
+    }
     setPreviewUrl(URL.createObjectURL(file));
     onFileSelected(file);
   }
@@ -43,7 +53,7 @@ export function LogoUploader({
       <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
       <div className="text-sm text-[var(--muted)]">
         <p className="font-medium text-[var(--ink)]">Logo Toko</p>
-        <p>Klik untuk ganti foto. JPG/PNG, maks 2MB.</p>
+        <p>Klik untuk ganti foto. JPG, PNG, atau WEBP, maks 5 MB.</p>
       </div>
     </div>
   );

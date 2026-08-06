@@ -6,8 +6,6 @@ import { apiFetch, clearToken, getToken } from '../../lib/auth';
 import { formatRupiah, formatThousands, parseThousands } from '../../lib/format';
 import type { Category, Menu } from '../../lib/types';
 import { ThemeToggle } from '../../components/ThemeToggle';
-import { ThemeColorPicker } from '../../components/ThemeColorPicker';
-import { applyThemeColor, setThemeColor, DEFAULT_THEME_HUE } from '../../hooks/useThemeColor';
 import { Button } from '../../components/ui/button';
 import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
@@ -59,7 +57,7 @@ export default function SetupWizardPage() {
       <header className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--surface)]/90 px-4 py-4 backdrop-blur sm:px-6">
         <div className="mx-auto flex max-w-2xl items-center justify-between">
           <div>
-            <h1 className="text-lg font-bold text-[var(--ink)]">Yuk, siapkan tokomu</h1>
+            <h1 className="font-serif text-lg font-bold text-[var(--ink)]">Yuk, siapkan tokomu</h1>
             <p className="text-xs text-[var(--muted)]">Langkah {step + 1} dari {STEPS.length} · {STEPS[step]}</p>
           </div>
           <ThemeToggle />
@@ -73,7 +71,7 @@ export default function SetupWizardPage() {
         <div className="border-b border-[var(--border)] bg-red-500/10 px-4 py-2 text-sm text-red-500 sm:px-6">{error}</div>
       )}
 
-      <div className="mx-auto max-w-2xl px-4 py-6 sm:py-8 sm:px-6">
+      <div className={`mx-auto px-4 py-6 sm:py-8 sm:px-6 ${step === 1 ? 'max-w-4xl' : 'max-w-2xl'}`}>
         {step === 0 && <ProfileStep name={storeName} onNameChange={setStoreName} onNext={() => setStep(1)} />}
         {step === 1 && <MenuStep onNext={() => setStep(2)} onBack={() => setStep(0)} />}
         {step === 2 && <CashierStep onNext={() => setStep(3)} onBack={() => setStep(1)} />}
@@ -109,7 +107,7 @@ function WizardCard({
           {icon}
         </div>
         <div>
-          <h2 className="text-lg font-bold text-[var(--ink)]">{title}</h2>
+          <h2 className="font-serif text-lg font-bold text-[var(--ink)]">{title}</h2>
           <p className="text-sm text-[var(--muted)]">{subtitle}</p>
         </div>
       </div>
@@ -184,14 +182,8 @@ function PrinterIcon() {
 function ProfileStep({
   name, onNameChange, onNext,
 }: { name: string; onNameChange: (name: string) => void; onNext: () => void }) {
-  const [themeHue, setThemeHue] = useState(DEFAULT_THEME_HUE);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-
-  function previewColor(hue: string) {
-    setThemeHue(hue);
-    applyThemeColor(hue); // preview langsung, disimpan ke server saat submit
-  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -201,7 +193,6 @@ function ProfileStep({
       // ponytail: zona waktu ikut device (Intl bawaan), tidak perlu tanya user.
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       await apiFetch('/api/v1/tenants/me', { method: 'PATCH', body: JSON.stringify({ name, timezone }) });
-      await setThemeColor(themeHue, DEFAULT_THEME_HUE);
       onNext();
     } catch (e: any) {
       setError(e.message);
@@ -215,9 +206,6 @@ function ProfileStep({
       <form onSubmit={submit} className="space-y-4">
         <Field label="Nama toko">
           <Input required autoFocus value={name} onChange={(e) => onNameChange(e.target.value)} placeholder="Contoh: Warung Bu Sari" />
-        </Field>
-        <Field label="Warna toko">
-          <ThemeColorPicker value={themeHue} onChange={previewColor} />
         </Field>
         {error && <p className="text-sm text-red-500">{error}</p>}
         <NextButton type="submit" disabled={saving || !name} label={saving ? 'Menyimpan...' : 'Lanjut'} />
@@ -277,64 +265,84 @@ function MenuStep({ onNext, onBack }: { onNext: () => void; onBack: () => void }
   }
 
   return (
-    <WizardCard icon={<MenuIcon />} title="Apa yang kamu jual?" subtitle="Masukin minimal 1 menu dulu, sisanya bisa nyusul kapan aja.">
-      <div className="mb-4 flex gap-2">
-        <Input
-          value={newCategory}
-          onChange={(e) => setNewCategory(e.target.value)}
-          placeholder="Bikin kategori (mis. Makanan, Minuman)"
-          className="h-10"
-        />
-        <Button type="button" variant="outline" size="sm" className="h-10 shrink-0" onClick={addCategory}>
-          Tambah
-        </Button>
-      </div>
-
-      <form onSubmit={addMenu} className="mb-4 space-y-3 rounded-xl border border-dashed border-[var(--border)] p-4">
-        <div className="flex gap-3">
+    <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+      <WizardCard icon={<MenuIcon />} title="Apa yang kamu jual?" subtitle="Masukin minimal 1 menu dulu, sisanya bisa nyusul kapan aja.">
+        <div className="mb-4 flex gap-2">
           <Input
-            required value={name} onChange={(e) => setName(e.target.value)} placeholder="Nama menu, mis. Nasi Goreng"
-            className="flex-1"
+            value={newCategory}
+            onChange={(e) => setNewCategory(e.target.value)}
+            placeholder="Bikin kategori (mis. Makanan, Minuman)"
+            className="h-10"
           />
-          <Input
-            required inputMode="numeric" value={formatThousands(price)}
-            onChange={(e) => setPrice(parseThousands(e.target.value))}
-            placeholder="Harga"
-            className="w-28"
-          />
+          <Button type="button" variant="outline" size="sm" className="h-10 shrink-0" onClick={addCategory}>
+            Tambah
+          </Button>
         </div>
-        <Select value={categoryId} onValueChange={setCategoryId}>
-          <SelectTrigger>
-            <SelectValue placeholder="Tanpa kategori" />
-          </SelectTrigger>
-          <SelectContent>
-            {categories.map((c) => (
-              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+
+        <form onSubmit={addMenu} className="mb-4 space-y-3 rounded-xl border border-dashed border-[var(--border)] p-4">
+          <div className="flex gap-3">
+            <Input
+              required value={name} onChange={(e) => setName(e.target.value)} placeholder="Nama menu, mis. Nasi Goreng"
+              className="flex-1"
+            />
+            <Input
+              required inputMode="numeric" value={formatThousands(price)}
+              onChange={(e) => setPrice(parseThousands(e.target.value))}
+              placeholder="Harga"
+              className="w-28"
+            />
+          </div>
+          <Select value={categoryId} onValueChange={setCategoryId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Tanpa kategori" />
+            </SelectTrigger>
+            <SelectContent>
+              {categories.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {error && <p className="text-sm text-red-500">{error}</p>}
+          <Button type="submit" disabled={saving} className="w-full">
+            Simpan menu ini
+          </Button>
+        </form>
+
+        <div className="flex gap-3">
+          <BackButton onClick={onBack} />
+          <NextButton onClick={onNext} disabled={menus.length === 0} />
+        </div>
+      </WizardCard>
+
+      <CashierPreview menus={menus} />
+    </div>
+  );
+}
+
+// ponytail: preview kasir cuma tampil di desktop (lg+) sesuai pola handoff — di mobile
+// list menu polos di form kiri sudah cukup jadi "live preview", tidak perlu kartu ganda.
+function CashierPreview({ menus }: { menus: Menu[] }) {
+  return (
+    <div className="hidden rounded-2xl bg-gradient-to-br from-[var(--primary)] to-[#4a0f0a] p-6 lg:flex lg:flex-col lg:items-center lg:sticky lg:top-24">
+      <p className="mb-3 text-xs font-bold uppercase tracking-wide text-[var(--accent)]">Pratinjau Kasir</p>
+      <div className="w-full max-w-[280px] rounded-2xl bg-white p-4 shadow-2xl">
+        <p className="mb-2.5 text-[11px] font-bold text-[var(--muted)]">MENU</p>
+        {menus.length === 0 ? (
+          <p className="py-6 text-center text-xs text-[var(--muted)]">Menu yang kamu tambah bakal muncul di sini.</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            {menus.map((m) => (
+              <div key={m.id} className="rounded-xl border border-[var(--border)] p-2">
+                <div className="mb-1.5 h-10 rounded-lg bg-[var(--surface-2)]" />
+                <p className="truncate text-[11px] font-bold text-neutral-900">{m.name}</p>
+                <p className="text-[11px] font-bold text-[var(--primary)] tabular-nums">{formatRupiah(m.price)}</p>
+              </div>
             ))}
-          </SelectContent>
-        </Select>
-        {error && <p className="text-sm text-red-500">{error}</p>}
-        <Button type="submit" disabled={saving} className="w-full">
-          Simpan menu ini
-        </Button>
-      </form>
-
-      {menus.length > 0 && (
-        <ul className="mb-6 space-y-2">
-          {menus.map((m) => (
-            <li key={m.id} className="flex items-center justify-between rounded-lg bg-[var(--surface-2)] px-3 py-2 text-sm">
-              <span className="text-[var(--ink)]">{m.name}</span>
-              <span className="font-semibold text-[var(--ink)] tabular-nums">{formatRupiah(m.price)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="flex gap-3">
-        <BackButton onClick={onBack} />
-        <NextButton onClick={onNext} disabled={menus.length === 0} />
+          </div>
+        )}
       </div>
-    </WizardCard>
+      <p className="mt-3.5 text-center text-xs text-white/70">Begini tampilan kasirmu nanti — update tiap kamu tambah menu.</p>
+    </div>
   );
 }
 

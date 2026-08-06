@@ -4,7 +4,7 @@ import Fastify, { type FastifyRequest, type FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import { z } from 'zod';
-import { and, eq, between } from 'drizzle-orm';
+import { and, eq, between, inArray } from 'drizzle-orm';
 import { createDb, requireFeature, hasFeature, type TenantPlan } from '@ipos-cloud/shared';
 import { pos_shifts, pos_orders, pos_order_items, tenants } from '@ipos-cloud/drizzle-schema';
 
@@ -186,13 +186,26 @@ async function deductIngredientsIfEnabled(user: JwtUser, items: z.infer<typeof o
 app.get('/api/v1/pos/orders', { preHandler: requireAuth }, async (req) => {
   const user = jwtUser(req);
   const { date } = req.query as { date?: string };
-  if (date) {
-    const from = new Date(date + 'T00:00:00Z');
-    const to = new Date(date + 'T23:59:59Z');
-    return db.select().from(pos_orders)
-      .where(and(eq(pos_orders.tenant_id, user.tenant_id), between(pos_orders.created_at, from, to)));
+  const orders = date
+    ? await db.select().from(pos_orders).where(and(
+        eq(pos_orders.tenant_id, user.tenant_id),
+        between(pos_orders.created_at, new Date(date + 'T00:00:00Z'), new Date(date + 'T23:59:59Z')),
+      ))
+    : await db.select().from(pos_orders).where(eq(pos_orders.tenant_id, user.tenant_id));
+
+  if (!orders.length) return orders;
+  const items = await db.select().from(pos_order_items)
+    .where(inArray(pos_order_items.order_id, orders.map((o) => o.id)));
+  const itemsByOrder = new Map<string, typeof items>();
+  for (const item of items) {
+    const list = itemsByOrder.get(item.order_id) ?? [];
+    list.push(item);
+    itemsByOrder.set(item.order_id, list);
   }
-  return db.select().from(pos_orders).where(eq(pos_orders.tenant_id, user.tenant_id));
+  return orders.map((o) => ({
+    ...o,
+    items: (itemsByOrder.get(o.id) ?? []).map((i) => ({ product_name: i.product_name, qty: i.qty })),
+  }));
 });
 
 app.post('/api/v1/pos/orders/:id/void', { preHandler: [requireAuth, requireFeature('void_transaction')] }, async (req, reply) => {

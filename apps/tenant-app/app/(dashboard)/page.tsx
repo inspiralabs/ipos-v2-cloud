@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ShoppingCart, UtensilsCrossed, FileBarChart, Receipt } from 'lucide-react';
+import { ShoppingCart, UtensilsCrossed, FileBarChart, Receipt, ListOrdered, Sparkles, Coffee, ShoppingBag, Soup } from 'lucide-react';
 import { apiFetch } from '@/lib/auth';
 import { formatRupiah } from '@/lib/format';
 import { useTenant } from '@/components/layout/TenantContext';
@@ -28,6 +28,7 @@ type RecentOrder = {
   customer_name: string | null;
   table_number: string | null;
   created_at: string;
+  items: { product_name: string; qty: number }[];
 };
 
 function greeting() {
@@ -42,8 +43,23 @@ function todayDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+function timeAgo(iso: string) {
+  const diffMin = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (diffMin < 1) return 'Baru saja';
+  if (diffMin < 60) return `${diffMin} menit lalu`;
+  const diffHour = Math.round(diffMin / 60);
+  if (diffHour < 24) return `${diffHour} jam lalu`;
+  return `${Math.round(diffHour / 24)} hari lalu`;
+}
+
+function orderTitle(o: RecentOrder) {
+  if (!o.items?.length) return o.customer_name || (o.table_number ? `Meja ${o.table_number}` : 'Transaksi');
+  return o.items.map((i) => (i.qty > 1 ? `${i.product_name} ×${i.qty}` : i.product_name)).join(', ');
+}
+
+function orderMeta(o: RecentOrder) {
+  const place = o.table_number ? `Meja ${o.table_number}` : 'Bawa pulang';
+  return `${place} · ${paymentLabel[o.payment_method] ?? o.payment_method} · ${timeAgo(o.created_at)}`;
 }
 
 const paymentLabel: Record<string, string> = {
@@ -51,6 +67,11 @@ const paymentLabel: Record<string, string> = {
   qris: 'QRIS',
   transfer: 'Transfer',
 };
+
+const CATEGORY_ICONS = [Coffee, Soup, ShoppingBag];
+function orderIcon(index: number) {
+  return CATEGORY_ICONS[index % CATEGORY_ICONS.length];
+}
 
 export default function DashboardPage() {
   const { tenant } = useTenant();
@@ -105,21 +126,31 @@ export default function DashboardPage() {
           </CardHeader>
         </Card>
         <div className="flex flex-col gap-3">
-          <Card>
-            <CardHeader>
-              {summary === null ? (
-                <Skeleton className="h-6 w-8" />
-              ) : (
-                <CardTitle className="tabular-nums">{summary.total_transactions}</CardTitle>
-              )}
-              <p className="text-xs text-[var(--muted)]">Transaksi hari ini</p>
-            </CardHeader>
+          <Card className="flex-1">
+            <CardContent className="flex h-full items-center gap-3 pt-6">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-2)] text-[var(--primary)]">
+                <ListOrdered className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                {summary === null ? (
+                  <Skeleton className="h-7 w-8" />
+                ) : (
+                  <p className="text-2xl font-bold tabular-nums text-[var(--ink)]">{summary.total_transactions}</p>
+                )}
+                <p className="text-xs text-[var(--muted)]">Transaksi hari ini</p>
+              </div>
+            </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>{tenant.plan.replace('_', ' ')}</CardTitle>
-              <p className="text-xs text-[var(--muted)]">Paket aktif</p>
-            </CardHeader>
+          <Card className="flex-1 border-[var(--accent)]/30 bg-[var(--accent)]/10">
+            <CardContent className="flex h-full items-center gap-3 pt-6">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-[var(--accent-ink)]">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-lg font-bold capitalize text-[var(--ink)]">{tenant.plan.replace('_', ' ')}</p>
+                <p className="text-xs text-[var(--muted)]">Paket aktif</p>
+              </div>
+            </CardContent>
           </Card>
         </div>
       </div>
@@ -146,14 +177,19 @@ export default function DashboardPage() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle>Transaksi Terbaru</CardTitle>
+          {!isEmpty && (
+            <Link href="/laporan" className="text-sm font-semibold text-[var(--primary)] hover:underline">
+              Lihat semua
+            </Link>
+          )}
         </CardHeader>
         <CardContent className="pt-0">
           {recent === null ? (
             <div className="space-y-2">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-14 w-full" />
+              <Skeleton className="h-14 w-full" />
             </div>
           ) : isEmpty ? (
             <p className="py-6 text-center text-sm text-[var(--muted)]">
@@ -161,21 +197,23 @@ export default function DashboardPage() {
             </p>
           ) : (
             <ul className="divide-y divide-[var(--border)]">
-              {recent.map((o) => (
-                <li key={o.id} className="flex items-center justify-between gap-3 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-[var(--ink)]">
-                      {o.customer_name || (o.table_number ? `Meja ${o.table_number}` : 'Transaksi')}
-                    </p>
-                    <p className="text-xs text-[var(--muted)]">
-                      {formatTime(o.created_at)} · {paymentLabel[o.payment_method] ?? o.payment_method}
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-sm font-bold tabular-nums text-[var(--ink)]">
-                    {formatRupiah(o.total)}
-                  </span>
-                </li>
-              ))}
+              {recent.map((o, i) => {
+                const Icon = orderIcon(i);
+                return (
+                  <li key={o.id} className="flex items-center gap-3 py-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-2)] text-[var(--primary)]">
+                      <Icon className="h-4.5 w-4.5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-[var(--ink)]">{orderTitle(o)}</p>
+                      <p className="truncate text-xs text-[var(--muted)]">{orderMeta(o)}</p>
+                    </div>
+                    <span className="shrink-0 text-sm font-bold tabular-nums text-[var(--ink)]">
+                      {formatRupiah(o.total)}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </CardContent>

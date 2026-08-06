@@ -12,6 +12,7 @@
     "dev:report": "pnpm --filter report-service dev",
     "dev:notification": "pnpm --filter notification-service dev",
     "dev:ws": "pnpm --filter websocket-gateway dev",
+    "dev": "pnpm --filter @ipos-cloud/drizzle-schema build && pnpm --filter @ipos-cloud/shared build && pnpm -r --parallel --filter=./services/* dev",
     "build:packages": "pnpm --filter @ipos-cloud/drizzle-schema build && pnpm --filter @ipos-cloud/shared build",
     "build": "pnpm -r build",
     "type-check": "pnpm -r type-check",

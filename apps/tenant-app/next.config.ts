@@ -6,6 +6,7 @@ const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://localhost:3001'
 const TENANT_SERVICE_URL = process.env.TENANT_SERVICE_URL || 'http://localhost:3002';
 const POS_SERVICE_URL = process.env.POS_SERVICE_URL || 'http://localhost:3003';
 const CATALOG_SERVICE_URL = process.env.CATALOG_SERVICE_URL || 'http://localhost:3004';
+const INVENTORY_SERVICE_URL = process.env.INVENTORY_SERVICE_URL || 'http://localhost:3005';
 const REPORT_SERVICE_URL = process.env.REPORT_SERVICE_URL || 'http://localhost:3008';
 
 const nextConfig: NextConfig = {
@@ -16,6 +17,7 @@ const nextConfig: NextConfig = {
       { source: '/api/v1/tenants/:path*', destination: `${TENANT_SERVICE_URL}/api/v1/tenants/:path*` },
       { source: '/api/v1/pos/:path*', destination: `${POS_SERVICE_URL}/api/v1/pos/:path*` },
       { source: '/api/v1/catalog/:path*', destination: `${CATALOG_SERVICE_URL}/api/v1/catalog/:path*` },
+      { source: '/api/v1/inventory/:path*', destination: `${INVENTORY_SERVICE_URL}/api/v1/inventory/:path*` },
       { source: '/api/v1/reports/:path*', destination: `${REPORT_SERVICE_URL}/api/v1/reports/:path*` },
     ];
   },

@@ -1,14 +1,32 @@
 'use client';
 
 import { useState } from 'react';
+import { toast } from 'sonner';
+import { apiFetch } from '@/lib/auth';
+import { useTenant } from '@/components/layout/TenantContext';
+import { ImageDropzone } from '@/components/pengaturan/ImageDropzone';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/empty-state';
 import { Switch } from '@/components/ui/switch';
 
-// ponytail: upload gambar QRIS statis atau koneksi payment gateway butuh backend
-// (upload storage / integrasi gateway) yang belum ada — halaman ini shell UI, disambungkan nanti.
 export default function QrisPage() {
+  const { tenant, refetch } = useTenant();
   const [enabled, setEnabled] = useState(true);
+  const [uploading, setUploading] = useState(false);
+
+  async function handleQrisSelected(file: File) {
+    const fd = new FormData();
+    fd.append('file', file);
+    setUploading(true);
+    try {
+      await apiFetch('/api/v1/tenants/me/qris', { method: 'POST', body: fd });
+      await refetch();
+      toast.success('Gambar QRIS diperbarui');
+    } catch (e: any) {
+      toast.error(e.message || 'Gagal upload QRIS');
+    } finally {
+      setUploading(false);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -22,7 +40,15 @@ export default function QrisPage() {
             <span className="text-sm font-medium text-[var(--ink)]">Aktifkan QRIS di kasir</span>
             <Switch checked={enabled} onCheckedChange={setEnabled} />
           </div>
-          <EmptyState>Belum ada QRIS terpasang. Unggah gambar QRIS atau sambungkan payment gateway di sini nanti.</EmptyState>
+          <div>
+            <p className="mb-2 text-sm font-medium text-[var(--ink)]">Gambar QRIS statis</p>
+            <ImageDropzone
+              currentUrl={tenant.qris_url}
+              alt="QRIS toko"
+              onFileSelected={handleQrisSelected}
+              uploading={uploading}
+            />
+          </div>
         </CardContent>
       </Card>
     </div>

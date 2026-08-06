@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Brand default Inspira POS: maroon/gold/cream/charcoal. --primary bisa diganti owner (lihat hooks/useThemeColor.ts) — --accent tetap. */
+/* Brand Inspira POS: maroon/gold/cream/charcoal — satu identitas tetap, tidak bisa diganti owner. */
 :root {
   --bg: oklch(0.96 0.015 75);
   --surface: oklch(1 0 0);
@@ -22,6 +22,7 @@
 }
 
 @theme inline {
+  --font-serif: var(--font-lora), ui-serif, serif;
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
@@ -77,4 +78,25 @@ body {
 body {
   background: var(--bg);
   color: var(--ink);
+}
+
+@keyframes tip-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-tip-fade {
+  animation: tip-fade 0.4s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-tip-fade {
+    animation: none;
+  }
 }

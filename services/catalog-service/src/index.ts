@@ -2,9 +2,10 @@ import 'dotenv/config';
 import Fastify, { type FastifyRequest, type FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
+import multipart from '@fastify/multipart';
 import { z } from 'zod';
 import { and, eq } from 'drizzle-orm';
-import { createDb } from '@ipos-cloud/shared';
+import { createDb, createR2Client, uploadToR2, extensionForMimeType } from '@ipos-cloud/shared';
 import {
   categories, menus,
   variant_groups, variant_options, menu_variant_groups,
@@ -15,6 +16,9 @@ app.register(cors, { origin: process.env.CORS_ORIGIN || true, credentials: true 
 app.register(jwt, {
   secret: { public: process.env.JWT_PUBLIC_KEY!.replace(/\\n/g, '\n') },
 });
+app.register(multipart, { limits: { fileSize: 2 * 1024 * 1024 } }); // 2MB, sama batasnya dengan LogoUploader di frontend
+
+const r2 = createR2Client();
 
 const db = createDb(process.env.DATABASE_URL!);
 const TABLE_SERVICE_URL = process.env.TABLE_SERVICE_URL || 'http://localhost:3007';
@@ -126,6 +130,24 @@ app.post('/api/v1/catalog/menus/:id/sold-out', { preHandler: requireAuth }, asyn
     .where(and(eq(menus.id, id), eq(menus.tenant_id, tenantId(req))))
     .returning();
   if (!row) return reply.code(404).send({ error: 'Not found' });
+  return row;
+});
+
+// Upload foto menu ke Cloudflare R2 — key overwrite (ganti foto = upload ulang), jadi tidak menyisakan file lama.
+app.post('/api/v1/catalog/menus/:id/photo', { preHandler: requireAuth }, async (req, reply) => {
+  const { id } = req.params as { id: string };
+  const tid = tenantId(req);
+  const [menu] = await db.select({ id: menus.id }).from(menus).where(and(eq(menus.id, id), eq(menus.tenant_id, tid)));
+  if (!menu) return reply.code(404).send({ error: 'Not found' });
+
+  const file = await req.file();
+  if (!file) return reply.code(400).send({ error: 'File tidak ditemukan', code: 'NO_FILE' });
+  const ext = extensionForMimeType(file.mimetype);
+  if (!ext) return reply.code(400).send({ error: 'Format harus JPG, PNG, atau WEBP', code: 'INVALID_TYPE' });
+
+  const buffer = await file.toBuffer();
+  const image_url = await uploadToR2(r2, `tenants/${tid}/menus/${id}.${ext}`, buffer, file.mimetype);
+  const [row] = await db.update(menus).set({ image_url, updated_at: new Date() }).where(eq(menus.id, id)).returning();
   return row;
 });
 

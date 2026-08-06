@@ -17,7 +17,7 @@ export type ReceiptOrder = {
   created_at: string;
 };
 
-export type ReceiptStore = { name: string; address: string | null; phone: string | null };
+export type ReceiptStore = { name: string; address: string | null; phone: string | null; receipt_footer?: string | null };
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const receiptNo = (o: ReceiptOrder) => `#${o.id.slice(0, 8).toUpperCase()}`;
@@ -93,7 +93,7 @@ function receiptBodyHtml(order: ReceiptOrder, store: ReceiptStore): string {
       ${order.change_amount != null && order.change_amount > 0 ? `<div class="row change"><span>Kembalian</span><span>${formatRupiah(order.change_amount)}</span></div>` : ''}
     </div>
     <div class="footer">
-      <p class="msg">Terima kasih!</p>
+      <p class="msg">${esc(store.receipt_footer || 'Terima kasih!')}</p>
       <div class="powered">
         <b>INSPIRA POS</b>
         <span>inspirapos.biz.id</span>

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Store, Printer, QrCode, Bell, CreditCard, Palette } from 'lucide-react';
+import { Store, Printer, QrCode, Bell, CreditCard } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useTenant } from '@/components/layout/TenantContext';
@@ -14,7 +14,6 @@ const BASE_ITEMS = [
   { href: '/pengaturan/qris', label: 'QRIS', desc: 'Kelola pembayaran QRIS', icon: QrCode },
   { href: '/pengaturan/notifikasi', label: 'Notifikasi', desc: 'Pengingat & pemberitahuan', icon: Bell },
   { href: '/pengaturan/billing', label: 'Paket & Tagihan', desc: 'Plan aktif, upgrade paket', icon: CreditCard },
-  { href: '/pengaturan/tema', label: 'Tema', desc: 'Warna tampilan toko', icon: Palette },
 ];
 
 export default function PengaturanPage() {

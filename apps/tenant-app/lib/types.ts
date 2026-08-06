@@ -90,6 +90,8 @@ export type Tenant = {
   theme_color: string;
   address: string | null;
   phone: string | null;
+  qris_url: string | null;
+  receipt_footer: string | null;
   user: { id: string; name: string; email: string; role: string };
   feature_overrides: Record<string, boolean>;
 };

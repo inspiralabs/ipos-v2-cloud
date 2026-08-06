@@ -13,6 +13,9 @@ const badgeVariants = cva(
         progress: 'bg-[var(--accent)] text-[var(--accent-ink)]',
         // inactive/revoked renders as an outline, not a fill — quieter on purpose, the "nothing to do here" state
         inactive: 'border border-[var(--border)] text-[var(--muted)]',
+        // category: non-status labels (plan tier, business type, product interest) — flat neutral fill,
+        // deliberately quieter than the semantic tones above so it never competes with the Status column.
+        category: 'bg-[var(--surface-2)] text-[var(--ink)]',
       },
     },
     defaultVariants: { tone: 'inactive' },

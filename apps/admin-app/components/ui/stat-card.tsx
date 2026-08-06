@@ -6,6 +6,7 @@ const TONE_TEXT: Record<BadgeTone, string> = {
   expired: 'text-[var(--status-expired)]',
   inactive: 'text-[var(--muted)]',
   progress: 'text-[var(--accent)]',
+  category: 'text-[var(--ink)]',
 };
 
 export function StatCard({ label, value, tone }: { label: string; value: number; tone: BadgeTone }) {

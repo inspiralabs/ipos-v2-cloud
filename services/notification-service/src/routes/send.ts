@@ -12,6 +12,7 @@ import { sendEmail, renderTemplate } from '../email.js';
 const FALLBACK_SUBJECT: Record<string, string> = {
   'tenant.invitation': 'Akun Inspira POS kamu sudah siap',
   'password.reset': 'Reset password Inspira POS kamu',
+  'notif.test': 'Notifikasi test Inspira POS',
 };
 const FALLBACK_BODY: Record<string, string> = {
   'tenant.invitation': `
@@ -25,6 +26,10 @@ const FALLBACK_BODY: Record<string, string> = {
     <p>Kami menerima permintaan reset password untuk akun Inspira POS kamu.</p>
     <p><a href="{{reset_url}}">Klik di sini untuk atur password baru</a> (berlaku 1 jam).</p>
     <p>Kalau kamu tidak meminta ini, abaikan saja email ini — password kamu tetap aman.</p>
+  `,
+  'notif.test': `
+    <p>Halo {{name}},</p>
+    <p>Ini email test dari Inspira POS. Kalau kamu menerima email ini, notifikasi email toko kamu berfungsi normal.</p>
   `,
 };
 

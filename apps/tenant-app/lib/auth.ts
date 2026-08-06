@@ -19,7 +19,8 @@ export async function apiFetch(path: string, init?: RequestInit) {
   const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}${path}`, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
+      // FormData: biarkan browser set Content-Type multipart + boundary sendiri.
+      ...(init?.body && !(init.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
@@ -34,5 +35,7 @@ export async function apiFetch(path: string, init?: RequestInit) {
     }
     throw Object.assign(new Error(err.error || 'Request failed'), { status: res.status, code: err.code });
   }
-  return res.json();
+  if (res.status === 204) return null;
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }

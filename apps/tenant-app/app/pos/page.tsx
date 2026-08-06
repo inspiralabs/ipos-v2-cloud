@@ -39,7 +39,7 @@ export default function PosPage() {
   const [tableNumber, setTableNumber] = useState('');
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [pickCustomerFromHeader, setPickCustomerFromHeader] = useState(false);
-  const [store, setStore] = useState<ReceiptStore>({ name: 'Toko', address: null, phone: null });
+  const [store, setStore] = useState<ReceiptStore>({ name: 'Toko', address: null, phone: null, receipt_footer: null });
   const [lastOrder, setLastOrder] = useState<ReceiptOrder | null>(null);
 
   useEffect(() => {
@@ -61,7 +61,7 @@ export default function PosPage() {
         setGroups(gs);
         setLinks(ls);
         setShift(currentShift);
-        if (tenant) setStore({ name: tenant.name, address: tenant.address, phone: tenant.phone });
+        if (tenant) setStore({ name: tenant.name, address: tenant.address, phone: tenant.phone, receipt_footer: tenant.receipt_footer });
       })
       .catch((e) => {
         if (e.status === 401) {

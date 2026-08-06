@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { applyTheme, getTheme, setTheme } from '../lib/theme';
+import { Switch } from './ui/switch';
 
 function SunIcon() {
   return (
@@ -20,7 +21,7 @@ function MoonIcon() {
   );
 }
 
-export function ThemeToggle() {
+function useDarkMode() {
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
@@ -36,6 +37,12 @@ export function ThemeToggle() {
     setTheme(next);
   }
 
+  return { dark, toggle };
+}
+
+export function ThemeToggle() {
+  const { dark, toggle } = useDarkMode();
+
   return (
     <button
       onClick={toggle}
@@ -45,5 +52,20 @@ export function ThemeToggle() {
     >
       {dark ? <SunIcon /> : <MoonIcon />}
     </button>
+  );
+}
+
+/** Baris switch mode gelap — dipakai di dalam dropdown profil (Topbar), bukan icon button berdiri sendiri. */
+export function ThemeToggleRow() {
+  const { dark, toggle } = useDarkMode();
+
+  return (
+    <label className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm text-[var(--ink)] hover:bg-[var(--surface-2)]">
+      <span className="flex items-center gap-2.5">
+        {dark ? <MoonIcon /> : <SunIcon />}
+        Mode Gelap
+      </span>
+      <Switch checked={dark} onCheckedChange={toggle} />
+    </label>
   );
 }

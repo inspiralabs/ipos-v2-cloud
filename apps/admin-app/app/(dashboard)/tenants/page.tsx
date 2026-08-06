@@ -46,6 +46,10 @@ type Tenant = {
   deleted_at: string | null;
 };
 
+function planLabel(plan: string) {
+  return PLAN_OPTIONS.find((p) => p.value === plan)?.label ?? plan;
+}
+
 function statusInfo(status: string): { tone: BadgeTone; label: string } {
   if (status === 'trial') return { tone: 'trial', label: 'Trial' };
   if (status === 'active') return { tone: 'active', label: 'Aktif' };
@@ -655,7 +659,7 @@ export default function TenantsPage() {
                       </TableCell>
                       <TableCell className="font-medium text-[var(--ink)]">{t.name}</TableCell>
                       <TableCell className="font-mono text-xs text-[var(--muted)]">{t.slug}</TableCell>
-                      <TableCell className="text-[var(--muted)]">{t.plan}</TableCell>
+                      <TableCell><Badge tone="category">{planLabel(t.plan)}</Badge></TableCell>
                       <TableCell>
                         <Badge tone={info.tone}>{info.label}</Badge>
                         {daysLeft !== null && (
@@ -694,12 +698,15 @@ export default function TenantsPage() {
                         </div>
                       </div>
                       <p className="text-xs text-[var(--muted)]">{t.email}</p>
-                      <p className="mt-1 text-[11px] text-[var(--muted)]">
-                        Plan {t.plan} · Daftar {t.created_at.slice(0, 10)}
-                        {daysLeft !== null && (
-                          <span className={daysLeft <= 3 ? 'text-[var(--status-expired)]' : ''}> · {daysLeft > 0 ? `sisa ${daysLeft} hari` : 'trial berakhir'}</span>
-                        )}
-                      </p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <Badge tone="category">{planLabel(t.plan)}</Badge>
+                        <p className="text-[11px] text-[var(--muted)]">
+                          Daftar {t.created_at.slice(0, 10)}
+                          {daysLeft !== null && (
+                            <span className={daysLeft <= 3 ? 'text-[var(--status-expired)]' : ''}> · {daysLeft > 0 ? `sisa ${daysLeft} hari` : 'trial berakhir'}</span>
+                          )}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </Card>

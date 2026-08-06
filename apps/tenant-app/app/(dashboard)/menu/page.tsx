@@ -3,12 +3,15 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
+import { toast } from 'sonner';
 import { apiFetch, clearToken, getToken } from '@/lib/auth';
 import { formatRupiah, formatThousands, parseThousands } from '@/lib/format';
 import type { Category, Menu, MenuVariantGroup, VariantGroup } from '@/lib/types';
 import { useTenant } from '@/components/layout/TenantContext';
+import { hasFeature } from '@/lib/plan-features';
 import { SandboxLimitBanner } from '@/components/SandboxLimitBanner';
 import { MenuCard } from '@/components/menu/MenuCard';
+import { MenuPhotoUploader } from '@/components/menu/MenuPhotoUploader';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -101,9 +104,6 @@ export default function MenuPage() {
           <Button variant="outline" size="sm" onClick={() => setGroupsOpen(true)}>
             Grup Variasi
           </Button>
-          <Button size="sm" onClick={() => setEditing('new')} disabled={sandboxLimitReached}>
-            + Menu
-          </Button>
         </div>
       </header>
 
@@ -118,9 +118,10 @@ export default function MenuPage() {
           </div>
         )}
         {menus.length === 0 ? (
-          <EmptyState>
-            Belum ada menu. Klik <span className="font-semibold text-[var(--ink)]">+ Menu</span> untuk menambah.
-          </EmptyState>
+          <div className="rounded-2xl border border-dashed border-[var(--border)] p-8 text-center">
+            <p className="mb-3 text-sm text-[var(--muted)]">Belum ada menu.</p>
+            <Button size="sm" onClick={() => setEditing('new')} disabled={sandboxLimitReached}>+ Menu</Button>
+          </div>
         ) : (
           byCategory.map(({ category, items }) => (
             <section key={category?.id ?? 'uncat'} className="mb-8">
@@ -230,8 +231,34 @@ function MenuForm({
   const [discountValue, setDiscountValue] = useState(String(menu?.discount_value ?? ''));
   const [categoryId, setCategoryId] = useState(menu?.category_id ?? '');
   const [selectedGroups, setSelectedGroups] = useState<string[]>(linkedGroupIds);
+  const [imageUrl, setImageUrl] = useState(menu?.image_url ?? null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [initialStock, setInitialStock] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  async function uploadPhotoTo(menuId: string, file: File) {
+    const fd = new FormData();
+    fd.append('file', file);
+    const updated = await apiFetch(`/api/v1/catalog/menus/${menuId}/photo`, { method: 'POST', body: fd });
+    setImageUrl(updated.image_url);
+  }
+
+  async function uploadPhoto(file: File) {
+    if (!menu) {
+      setPendingFile(file); // menu baru: upload ditunda sampai menu tersimpan (butuh id)
+      return;
+    }
+    try {
+      await uploadPhotoTo(menu.id, file);
+      toast.success('Foto menu diperbarui');
+    } catch (e: any) {
+      toast.error(e.message || 'Gagal upload foto');
+    }
+  }
+
+  const { tenant } = useTenant();
+  const stockEnabled = hasFeature(tenant.plan, 'stock_management', tenant.feature_overrides);
 
   const priceNum = parseInt(price || '0', 10);
   const discountValueNum = parseInt(discountValue || '0', 10);
@@ -261,6 +288,27 @@ function MenuForm({
         method: 'PUT',
         body: JSON.stringify({ group_ids: selectedGroups }),
       });
+
+      if (pendingFile) {
+        try {
+          await uploadPhotoTo(saved.id, pendingFile);
+        } catch (e: any) {
+          toast.error(e.message || 'Menu tersimpan, tapi gagal upload foto');
+        }
+      }
+
+      const initialStockQty = parseInt(initialStock || '0', 10);
+      if (!menu && stockEnabled && initialStockQty > 0) {
+        try {
+          await apiFetch(`/api/v1/inventory/stock-levels/${saved.id}/restock`, {
+            method: 'POST',
+            body: JSON.stringify({ qty_added: initialStockQty }),
+          });
+        } catch (e: any) {
+          toast.error(e.message || 'Menu tersimpan, tapi gagal isi stok awal');
+        }
+      }
+
       onSaved();
     } catch (e: any) {
       setError(e.message);
@@ -271,6 +319,21 @@ function MenuForm({
   return (
     <Modal title={menu ? 'Ubah Menu' : 'Tambah Menu'} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
+        <Field label="Foto Menu" hint="Klik untuk pilih. JPG/PNG/WEBP, maks 2MB.">
+          <MenuPhotoUploader currentUrl={imageUrl} onFileSelected={uploadPhoto} />
+        </Field>
+
+        {!menu && stockEnabled && (
+          <Field label="Stok Awal" hint="Boleh dikosongkan, isi 0 dulu juga tidak apa.">
+            <Input
+              inputMode="numeric" placeholder="Jumlah stok"
+              value={initialStock} onChange={(e) => setInitialStock(e.target.value.replace(/\D/g, ''))}
+            />
+          </Field>
+        )}
+
+        {menu && stockEnabled && <StockField menuId={menu.id} />}
+
         <Field label="Nama Menu">
           <Input required autoFocus value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
@@ -380,6 +443,58 @@ function MenuForm({
         </div>
       </form>
     </Modal>
+  );
+}
+
+// Stok cuma bisa diatur setelah menu tersimpan (butuh menu_id) — endpoint restock backend
+// auto-create baris stock_levels kalau belum ada, jadi ini juga jadi cara "aktifkan pelacakan stok".
+function StockField({ menuId }: { menuId: string }) {
+  const [stockQty, setStockQty] = useState<number | null>(null);
+  const [adding, setAdding] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    apiFetch('/api/v1/inventory/stock-levels')
+      .then((rows: { menu_id: string; stock_qty: number }[]) => {
+        setStockQty(rows.find((r) => r.menu_id === menuId)?.stock_qty ?? 0);
+      })
+      .catch(() => setStockQty(0));
+  }, [menuId]);
+
+  async function addStock() {
+    const qty = parseInt(adding || '0', 10);
+    if (qty <= 0) return;
+    setSaving(true);
+    try {
+      const row = await apiFetch(`/api/v1/inventory/stock-levels/${menuId}/restock`, {
+        method: 'POST',
+        body: JSON.stringify({ qty_added: qty }),
+      });
+      setStockQty(row.stock_qty);
+      setAdding('');
+      toast.success('Stok ditambahkan');
+    } catch (e: any) {
+      toast.error(e.message || 'Gagal menambah stok');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Field label="Stok">
+      <div className="flex items-center gap-2">
+        <span className="flex h-11 min-w-[64px] items-center justify-center rounded-xl border border-[var(--border)] px-3 text-sm font-semibold text-[var(--ink)]">
+          {stockQty ?? '...'}
+        </span>
+        <Input
+          inputMode="numeric" placeholder="Tambah qty"
+          value={adding} onChange={(e) => setAdding(e.target.value.replace(/\D/g, ''))}
+        />
+        <Button type="button" variant="outline" disabled={saving || !adding} onClick={addStock}>
+          Tambah
+        </Button>
+      </div>
+    </Field>
   );
 }
 

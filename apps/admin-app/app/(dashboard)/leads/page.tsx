@@ -60,6 +60,20 @@ const STATUS_INFO: Record<Lead['status'], { tone: BadgeTone; label: string }> = 
   trial: { tone: 'progress', label: 'Trial' },
 };
 
+const BUSINESS_TYPE_LABEL: Record<string, string> = {
+  umkm: 'UMKM', kafe: 'Kafe', restoran: 'Restoran', fnb_lain: 'F&B Lain', lainnya: 'Lainnya',
+};
+
+const PRODUCT_INTEREST_LABEL: Record<string, string> = {
+  offline: 'Offline', umkm: 'UMKM', fnb: 'F&B', unknown: 'Belum Tahu',
+};
+
+function businessTypeLabel(l: Lead) {
+  if (!l.business_type) return null;
+  if (l.business_type === 'lainnya') return l.business_type_other || 'Lainnya';
+  return BUSINESS_TYPE_LABEL[l.business_type] ?? l.business_type;
+}
+
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
 }
@@ -402,10 +416,12 @@ export default function LeadsPage() {
                         <div>{l.phone}</div>
                         {l.email && <div className="text-xs text-[var(--muted)]">{l.email}</div>}
                       </TableCell>
-                      <TableCell className="text-[var(--muted)]">
-                        {l.business_type === 'lainnya' ? l.business_type_other ?? 'Lainnya' : l.business_type ?? '-'}
+                      <TableCell>
+                        {businessTypeLabel(l) ? <Badge tone="category">{businessTypeLabel(l)}</Badge> : <span className="text-[var(--muted)]">-</span>}
                       </TableCell>
-                      <TableCell className="text-[var(--muted)]">{l.product_interest ?? '-'}</TableCell>
+                      <TableCell>
+                        {l.product_interest ? <Badge tone="category">{PRODUCT_INTEREST_LABEL[l.product_interest] ?? l.product_interest}</Badge> : <span className="text-[var(--muted)]">-</span>}
+                      </TableCell>
                       <TableCell><Badge tone={info.tone}>{info.label}</Badge></TableCell>
                       <TableCell className="text-[var(--muted)]" title={l.created_at.slice(0, 10)}>{relativeDate(l.created_at)}</TableCell>
                       <TableCell className="text-right">
@@ -444,7 +460,12 @@ export default function LeadsPage() {
                         </div>
                       </div>
                       <p className="text-xs text-[var(--muted)]">{l.phone}{l.email ? ` · ${l.email}` : ''}</p>
-                      {l.product_interest && <p className="mt-1 text-xs text-[var(--muted)]">Minat: {l.product_interest}</p>}
+                      {(businessTypeLabel(l) || l.product_interest) && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {businessTypeLabel(l) && <Badge tone="category">{businessTypeLabel(l)}</Badge>}
+                          {l.product_interest && <Badge tone="category">{PRODUCT_INTEREST_LABEL[l.product_interest] ?? l.product_interest}</Badge>}
+                        </div>
+                      )}
                       <div className="mt-2 flex items-center justify-between">
                         <p className="text-[11px] text-[var(--muted)]" title={l.created_at.slice(0, 10)}>Masuk {relativeDate(l.created_at)}</p>
                         {!l.deleted_at && (

@@ -56,7 +56,7 @@ export function StaffCard({
         {attendanceStatus === 'telat' && <Badge variant="warning">Telat</Badge>}
         {attendanceStatus === 'belum' && <Badge variant="neutral">Belum Absen</Badge>}
       </div>
-      <div className="flex w-full flex-wrap items-center justify-center gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
+      <div className="flex w-full flex-wrap items-center justify-center gap-1">
         <button
           type="button"
           aria-label="Ubah PIN"
