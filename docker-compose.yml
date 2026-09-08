@@ -184,6 +184,38 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  admin-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        APP_NAME: admin-app
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    ports:
+      - "3010:3010"
+    environment:
+      PORT: 3010
+    depends_on:
+      - auth-service
+      - tenant-service
+    restart: unless-stopped
+
+  tenant-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        APP_NAME: tenant-app
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    ports:
+      - "3100:3100"
+    environment:
+      PORT: 3100
+    depends_on:
+      - auth-service
+      - tenant-service
+    restart: unless-stopped
+
   nginx:
     image: nginx:alpine
     ports:
