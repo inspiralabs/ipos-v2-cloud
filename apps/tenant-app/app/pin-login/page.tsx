@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Delete } from 'lucide-react';
@@ -21,6 +21,14 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 export default function PinLoginPage() {
+  return (
+    <Suspense>
+      <PinLoginForm />
+    </Suspense>
+  );
+}
+
+function PinLoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tenantId = searchParams.get('tenant');
