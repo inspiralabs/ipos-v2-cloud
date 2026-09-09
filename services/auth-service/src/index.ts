@@ -8,7 +8,7 @@ import { createDb } from '@ipos-cloud/shared';
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info' } });
 
-app.register(cors, { origin: process.env.CORS_ORIGIN || true, credentials: true });
+app.register(cors, { origin: process.env.CORS_ORIGIN?.split(',') || true, credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] });
 app.register(cookie);
 // Default global: cukup longgar. Endpoint forgot/reset-password punya limit lebih ketat sendiri (lihat route masing-masing).
 app.register(rateLimit, { max: 100, timeWindow: '1 minute' });

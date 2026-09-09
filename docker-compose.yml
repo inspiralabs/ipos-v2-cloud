@@ -26,6 +26,7 @@ services:
       JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
       NODE_ENV: production
+      CORS_ORIGIN: ${CORS_ORIGIN}
     depends_on:
       redis:
         condition: service_healthy
@@ -55,6 +56,7 @@ services:
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
       R2_BUCKET_NAME: ${R2_BUCKET_NAME}
       R2_PUBLIC_URL: ${R2_PUBLIC_URL}
+      CORS_ORIGIN: ${CORS_ORIGIN}
     depends_on:
       - auth-service
       - notification-service
@@ -76,6 +78,7 @@ services:
       CATALOG_SERVICE_URL: http://catalog-service:3004
       TABLE_SERVICE_URL: http://table-service:3007
       INTERNAL_API_KEY: "${INTERNAL_API_KEY}"
+      CORS_ORIGIN: ${CORS_ORIGIN}
     restart: unless-stopped
 
   catalog-service:
@@ -95,6 +98,7 @@ services:
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
       R2_BUCKET_NAME: ${R2_BUCKET_NAME}
       R2_PUBLIC_URL: ${R2_PUBLIC_URL}
+      CORS_ORIGIN: ${CORS_ORIGIN}
     restart: unless-stopped
 
   inventory-service:
@@ -104,7 +108,7 @@ services:
       args:
         SERVICE_NAME: inventory-service
     ports: ["3005:3005"]
-    environment: { PORT: 3005, DATABASE_URL: "${DATABASE_URL}", JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}", INTERNAL_API_KEY: "${INTERNAL_API_KEY}" }
+    environment: { PORT: 3005, DATABASE_URL: "${DATABASE_URL}", JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}", INTERNAL_API_KEY: "${INTERNAL_API_KEY}", CORS_ORIGIN: "${CORS_ORIGIN}" }
     restart: unless-stopped
 
   kitchen-service:
@@ -120,6 +124,7 @@ services:
       JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}"
       REDIS_URL: redis://redis:6379
       INTERNAL_API_KEY: "${INTERNAL_API_KEY}"
+      CORS_ORIGIN: ${CORS_ORIGIN}
     depends_on:
       redis:
         condition: service_healthy
@@ -138,6 +143,7 @@ services:
       JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}"
       REDIS_URL: redis://redis:6379
       PUBLIC_ORDER_URL: "${PUBLIC_ORDER_URL:-http://localhost:3012/order}"
+      CORS_ORIGIN: ${CORS_ORIGIN}
     depends_on:
       redis:
         condition: service_healthy
@@ -150,7 +156,7 @@ services:
       args:
         SERVICE_NAME: report-service
     ports: ["3008:3008"]
-    environment: { PORT: 3008, DATABASE_URL: "${DATABASE_URL}", JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}" }
+    environment: { PORT: 3008, DATABASE_URL: "${DATABASE_URL}", JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}", CORS_ORIGIN: "${CORS_ORIGIN}" }
     restart: unless-stopped
 
   notification-service:
@@ -166,6 +172,7 @@ services:
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
       RESEND_API_KEY: ${RESEND_API_KEY}
       FONNTE_TOKEN: ${FONNTE_TOKEN}
+      CORS_ORIGIN: ${CORS_ORIGIN}
     restart: unless-stopped
 
   websocket-gateway:
@@ -179,6 +186,7 @@ services:
       PORT: 3011
       JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}"
       REDIS_URL: redis://redis:6379
+      CORS_ORIGIN: ${CORS_ORIGIN}
     depends_on:
       redis:
         condition: service_healthy

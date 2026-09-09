@@ -7,7 +7,7 @@ import { createDb, createR2Client } from '@ipos-cloud/shared';
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info' } });
 
-app.register(cors, { origin: process.env.CORS_ORIGIN || true, credentials: true });
+app.register(cors, { origin: process.env.CORS_ORIGIN?.split(',') || true, credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] });
 app.register(jwt, {
   secret: { public: process.env.JWT_PUBLIC_KEY!.replace(/\\n/g, '\n') },
 });

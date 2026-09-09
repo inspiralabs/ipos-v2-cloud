@@ -5,7 +5,7 @@ import { createDb } from '@ipos-cloud/shared';
 import { sendRoutes } from './routes/send.js';
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info' } });
-app.register(cors, { origin: process.env.CORS_ORIGIN || true, credentials: true });
+app.register(cors, { origin: process.env.CORS_ORIGIN?.split(',') || true, credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] });
 
 const db = createDb(process.env.DATABASE_URL!);
 app.decorate('db', db);
