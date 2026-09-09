@@ -137,7 +137,7 @@ services:
       DATABASE_URL: "${DATABASE_URL}"
       JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}"
       REDIS_URL: redis://redis:6379
-      PUBLIC_ORDER_URL: "${PUBLIC_ORDER_URL:-http://localhost:3100/order}"
+      PUBLIC_ORDER_URL: "${PUBLIC_ORDER_URL:-http://localhost:3012/order}"
     depends_on:
       redis:
         condition: service_healthy

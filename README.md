@@ -21,7 +21,7 @@ dokumen ini cuma peta folder + perintah cepat.
 Dashboard-nya sendiri (di `../apps/`):
 - `admin-app` (3010) — dashboard internal tim Inspira POS: kelola tenant, lisensi offline,
   dan **leads** dari form `/demo` landing-page.
-- `tenant-app` (3100) — dashboard untuk klien (tenant).
+- `tenant-app` (3012) — dashboard untuk klien (tenant).
 
 ## Jalankan cepat
 

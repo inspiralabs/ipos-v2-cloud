@@ -17,7 +17,7 @@ app.register(jwt, {
 
 const db = createDb(process.env.DATABASE_URL!);
 const redis = createRedis(process.env.REDIS_URL || 'redis://localhost:6379');
-const PUBLIC_ORDER_URL = process.env.PUBLIC_ORDER_URL || 'http://localhost:3100/order';
+const PUBLIC_ORDER_URL = process.env.PUBLIC_ORDER_URL || 'http://localhost:3012/order';
 
 async function requireAuth(request: FastifyRequest, reply: FastifyReply) {
   try {

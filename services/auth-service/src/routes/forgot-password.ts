@@ -37,7 +37,7 @@ export async function forgotPasswordRoute(app: FastifyInstance) {
       const expires_at = new Date(Date.now() + 60 * 60 * 1000); // 1 jam
       await db.insert(password_reset_tokens).values({ user_id: user.id, token_hash: hashToken(token), expires_at });
 
-      const appUrl = process.env.TENANT_APP_URL || 'http://localhost:3100';
+      const appUrl = process.env.TENANT_APP_URL || 'http://localhost:3012';
       await sendResetEmail({ name: user.name, email: user.email, reset_url: `${appUrl}/reset-password?token=${token}` });
     }
 
