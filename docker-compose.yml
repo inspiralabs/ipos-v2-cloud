@@ -208,7 +208,7 @@ services:
         APP_NAME: tenant-app
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     ports:
-      - "3100:3100"
+      - "3012:3100"
     environment:
       PORT: 3100
     depends_on:
