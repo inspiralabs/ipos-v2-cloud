@@ -23,7 +23,8 @@ COPY services/report-service/package.json services/report-service/
 COPY services/table-service/package.json services/table-service/
 COPY services/tenant-service/package.json services/tenant-service/
 COPY services/websocket-gateway/package.json services/websocket-gateway/
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 
 FROM deps AS build
 ARG SERVICE_NAME

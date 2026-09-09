@@ -11,7 +11,8 @@ FROM base AS deps
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/admin-app/package.json apps/admin-app/
 COPY apps/tenant-app/package.json apps/tenant-app/
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 
 FROM deps AS build
 ARG APP_NAME
