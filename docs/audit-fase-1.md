@@ -523,14 +523,24 @@ Sebelum menjalankan `0018_thick_wendell_rand.sql`, jalankan versi `SELECT count(
 `DELETE` di migrasi itu (predikat ditranskripsi apa adanya dari file, tidak ditulis ulang) dan
 periksa angkanya masuk akal (mis. tidak mendekati 100% dari total baris tabel) sebelum lanjut.
 
-**Untuk `menu_variant_groups`** — DELETE aslinya pakai `USING` (self-join), jadi versi hitungnya
-memakai join yang sama lewat dua alias tabel di klausa `FROM`:
+**Untuk `menu_variant_groups`** — DELETE aslinya pakai `USING` (self-join): tiap baris yang punya
+pasangan duplikat dengan `ctid` lebih kecil ikut terhapus. **Meniru join itu apa adanya di
+`SELECT count(*)` salah** untuk grup berisi 3 baris atau lebih — join menghitung *pasangan*
+(`a`×`b` yang cocok), bukan *baris*. Untuk grup ber-n baris duplikat, jumlah pasangan adalah
+`n(n-1)/2`, sedangkan DELETE hanya menghapus `n-1` baris (semua kecuali satu yang `ctid`-nya
+terkecil). Keduanya kebetulan sama untuk grup 2 baris (`1` pasangan = `1` baris dihapus), tapi
+untuk grup 3 baris — kasus yang disebut eksplisit di komentar migrasi sebagai sudah diverifikasi
+benar — versi join melaporkan `3` padahal yang benar-benar terhapus cuma `2`. Preflight yang
+melebih-lebihkan angka DELETE lebih berbahaya daripada tidak ada preflight sama sekali, karena
+operator jadi percaya pada angka yang salah.
+
+Versi yang benar tidak meniru join-nya, melainkan menghitung langsung selisih "total baris" minus
+"jumlah kombinasi `(menu_id, variant_group_id)` yang unik" — DELETE menyisakan tepat satu baris per
+kombinasi, jadi selisih itu sama dengan jumlah baris yang dihapus, untuk ukuran grup berapa pun:
 
 ```sql
-SELECT count(*) FROM "inspirapos_v2"."menu_variant_groups" a, "inspirapos_v2"."menu_variant_groups" b
-  WHERE a.ctid > b.ctid
-    AND a.menu_id = b.menu_id
-    AND a.variant_group_id = b.variant_group_id;
+SELECT count(*) - count(DISTINCT (menu_id, variant_group_id))
+  FROM "inspirapos_v2"."menu_variant_groups";
 ```
 
 **Untuk `attendance_logs`** — predikat `WHERE` disalin langsung dari `DELETE`:
