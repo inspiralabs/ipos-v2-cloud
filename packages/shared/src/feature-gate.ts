@@ -4,35 +4,8 @@ import { tenant_feature_overrides } from '@ipos-cloud/drizzle-schema';
 import type { TenantPlan } from './types.js';
 import type { Db } from './db.js';
 
-export const PLAN_FEATURES: Record<TenantPlan, string[]> = {
-  umkm_lite: ['basic_pos', 'basic_menu', 'basic_report', 'single_outlet', 'shift_management'],
-  umkm_pro: [
-    'basic_pos', 'basic_menu', 'basic_report', 'single_outlet',
-    'stock_management', 'advanced_report', 'void_transaction', 'shift_management', 'split_bill',
-  ],
-  resto_basic: [
-    'basic_pos', 'basic_menu', 'basic_report', 'single_outlet',
-    'table_management', 'kitchen_display', 'qr_self_order',
-  ],
-  resto_starter: [
-    'basic_pos', 'basic_menu', 'basic_report', 'single_outlet',
-    'stock_management', 'advanced_report', 'void_transaction', 'shift_management', 'split_bill',
-    'table_management', 'kitchen_display', 'qr_self_order', 'bom_recipe', 'absensi',
-  ],
-  resto_pro: [
-    'basic_pos', 'basic_menu', 'basic_report', 'multi_outlet',
-    'stock_management', 'advanced_report', 'void_transaction', 'shift_management', 'split_bill',
-    'table_management', 'kitchen_display', 'qr_self_order', 'bom_recipe', 'absensi',
-    'loyalty_program', 'food_cost_report', 'pnl_report', 'inter_branch_transfer',
-  ],
-  resto_business: [
-    'basic_pos', 'basic_menu', 'basic_report', 'multi_outlet',
-    'stock_management', 'advanced_report', 'void_transaction', 'shift_management', 'split_bill',
-    'table_management', 'kitchen_display', 'qr_self_order', 'bom_recipe', 'absensi',
-    'loyalty_program', 'food_cost_report', 'pnl_report', 'inter_branch_transfer',
-    'api_access', 'custom_integration',
-  ],
-};
+export { PLAN_FEATURES, planHasFeature } from './plan-features.js';
+import { PLAN_FEATURES, planHasFeature } from './plan-features.js';
 
 export async function hasFeature(
   db: Db,
@@ -51,14 +24,17 @@ export async function hasFeature(
 
   if (override) return override.is_enabled;
 
-  const features = PLAN_FEATURES[plan];
-  if (!features) {
+  if (!PLAN_FEATURES[plan]) {
     // plan_code default kolom adalah 'trial', yang bukan anggota TenantPlan. Dulu ini
     // diam-diam mengembalikan false sehingga tenant kehilangan SEMUA fitur tanpa jejak.
     console.warn(`[feature-gate] plan tidak dikenal "${plan}" untuk tenant ${tenantId} — semua fitur ditolak`);
     return false;
   }
-  return features.includes(featureKey);
+
+  // Delegasi, bukan duplikasi: satu-satunya beda antara versi backend dan versi
+  // browser adalah DARI MANA override-nya datang (query DB vs sudah di tangan).
+  // Cek tier-nya sama, jadi hanya ada satu implementasi.
+  return planHasFeature(plan, featureKey);
 }
 
 /**
