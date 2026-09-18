@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, text, integer, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, timestamp, text, integer, index, primaryKey } from 'drizzle-orm/pg-core';
 import { inspirapos } from './auth.js';
 import { tenants } from './tenant.js';
 
@@ -65,6 +65,7 @@ export const menu_variant_groups = inspirapos.table('menu_variant_groups', {
   tenant_id: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
 }, (t) => ({
   // tabel join, kedua arah dipakai
+  pk: primaryKey({ columns: [t.menu_id, t.variant_group_id] }),
   menuIdx: index('menu_variant_groups_menu_id_idx').on(t.menu_id),
   groupIdx: index('menu_variant_groups_variant_group_id_idx').on(t.variant_group_id),
 }));

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, integer, timestamp, text, date, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, integer, timestamp, text, date, index, unique } from 'drizzle-orm/pg-core';
 import { inspirapos, users } from './auth.js';
 import { tenants, outlets } from './tenant.js';
 import { ingredients } from './bom.js';
@@ -84,6 +84,7 @@ export const attendance_logs = inspirapos.table('attendance_logs', {
 }, (t) => ({
   // rekap absensi per tenant per tanggal
   tenantDateIdx: index('attendance_logs_tenant_id_date_idx').on(t.tenant_id, t.date),
+  perUserPerDay: unique('attendance_logs_tenant_id_user_id_date_unique').on(t.tenant_id, t.user_id, t.date),
 }));
 
 // ── Biaya operasional & waste (input manual owner, buat P&L / Laporan Waste) ──
