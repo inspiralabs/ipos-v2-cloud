@@ -40,7 +40,7 @@ app.get('/health', async () => ({ status: 'ok', service: 'inventory-service', ve
 
 app.get(
   '/api/v1/inventory/stock-levels',
-  { preHandler: [requireAuth, requireFeature('stock_management')] },
+  { preHandler: [requireAuth, requireFeature(db, 'stock_management')] },
   async (req) => {
     const user = jwtUser(req);
     const rows = await db
@@ -69,7 +69,7 @@ const restockBody = z.object({ qty_added: z.number().int().positive() });
 
 app.post(
   '/api/v1/inventory/stock-levels/:menu_id/restock',
-  { preHandler: [requireAuth, requireFeature('stock_management')] },
+  { preHandler: [requireAuth, requireFeature(db, 'stock_management')] },
   async (req, reply) => {
     const { qty_added } = restockBody.parse(req.body);
     const { menu_id } = req.params as { menu_id: string };
@@ -121,13 +121,13 @@ const ingredientBody = z.object({
 
 app.get(
   '/api/v1/inventory/ingredients',
-  { preHandler: [requireAuth, requireFeature('bom_recipe')] },
+  { preHandler: [requireAuth, requireFeature(db, 'bom_recipe')] },
   async (req) => db.select().from(ingredients).where(eq(ingredients.tenant_id, jwtUser(req).tenant_id))
 );
 
 app.post(
   '/api/v1/inventory/ingredients',
-  { preHandler: [requireAuth, requireFeature('bom_recipe')] },
+  { preHandler: [requireAuth, requireFeature(db, 'bom_recipe')] },
   async (req, reply) => {
     const body = ingredientBody.parse(req.body);
     const [row] = await db.insert(ingredients).values({ ...body, tenant_id: jwtUser(req).tenant_id }).returning();
@@ -137,7 +137,7 @@ app.post(
 
 app.put(
   '/api/v1/inventory/ingredients/:id',
-  { preHandler: [requireAuth, requireFeature('bom_recipe')] },
+  { preHandler: [requireAuth, requireFeature(db, 'bom_recipe')] },
   async (req, reply) => {
     const body = ingredientBody.partial().parse(req.body);
     const { id } = req.params as { id: string };
@@ -152,7 +152,7 @@ app.put(
 
 app.post(
   '/api/v1/inventory/ingredients/:id/restock',
-  { preHandler: [requireAuth, requireFeature('bom_recipe')] },
+  { preHandler: [requireAuth, requireFeature(db, 'bom_recipe')] },
   async (req, reply) => {
     const { qty_added } = restockBody.parse(req.body);
     const { id } = req.params as { id: string };
@@ -172,7 +172,7 @@ const recipeBody = z.object({
 
 app.get(
   '/api/v1/inventory/menus/:menu_id/recipe',
-  { preHandler: [requireAuth, requireFeature('bom_recipe')] },
+  { preHandler: [requireAuth, requireFeature(db, 'bom_recipe')] },
   async (req) => {
     const { menu_id } = req.params as { menu_id: string };
     return db.select().from(recipe_items)
@@ -182,7 +182,7 @@ app.get(
 
 app.put(
   '/api/v1/inventory/menus/:menu_id/recipe',
-  { preHandler: [requireAuth, requireFeature('bom_recipe')] },
+  { preHandler: [requireAuth, requireFeature(db, 'bom_recipe')] },
   async (req, reply) => {
     const { menu_id } = req.params as { menu_id: string };
     const { items } = recipeBody.parse(req.body);

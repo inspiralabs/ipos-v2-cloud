@@ -42,21 +42,34 @@ export async function hasFeature(
 ): Promise<boolean> {
   if (!plan) return false;
 
-  const overrides = await db
-    .select({ feature_key: tenant_feature_overrides.feature_key, is_enabled: tenant_feature_overrides.is_enabled })
+  // WHERE sudah memfilter feature_key, jadi baris pertama (kalau ada) sudah pasti key yang dicari.
+  const [override] = await db
+    .select({ is_enabled: tenant_feature_overrides.is_enabled })
     .from(tenant_feature_overrides)
-    .where(and(eq(tenant_feature_overrides.tenant_id, tenantId), eq(tenant_feature_overrides.feature_key, featureKey)));
+    .where(and(eq(tenant_feature_overrides.tenant_id, tenantId), eq(tenant_feature_overrides.feature_key, featureKey)))
+    .limit(1);
 
-  const override = overrides.find((row) => row.feature_key === featureKey);
   if (override) return override.is_enabled;
 
-  return PLAN_FEATURES[plan]?.includes(featureKey) ?? false;
+  const features = PLAN_FEATURES[plan];
+  if (!features) {
+    // plan_code default kolom adalah 'trial', yang bukan anggota TenantPlan. Dulu ini
+    // diam-diam mengembalikan false sehingga tenant kehilangan SEMUA fitur tanpa jejak.
+    console.warn(`[feature-gate] plan tidak dikenal "${plan}" untuk tenant ${tenantId} — semua fitur ditolak`);
+    return false;
+  }
+  return features.includes(featureKey);
 }
 
-export function requireFeature(featureKey: string) {
+/**
+ * `db` dioper eksplisit, TIDAK dibaca dari request.server.db. Versi lama membaca
+ * decorator itu, dan 4 service (inventory, kitchen, table, report) tidak pernah
+ * memanggil app.decorate('db') sehingga setiap route ber-gate membalas 500.
+ * Dengan db sebagai parameter, kelalaian yang sama jadi error compile.
+ */
+export function requireFeature(db: Db, featureKey: string) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const user = (request as unknown as { user?: { tenant_id?: string; plan?: TenantPlan | null } }).user;
-    const db = (request.server as unknown as { db: Db }).db;
     if (!user?.tenant_id || !(await hasFeature(db, user.tenant_id, user.plan, featureKey))) {
       return reply.code(403).send({ error: 'Feature not available on your plan', code: 'FEATURE_GATED' });
     }

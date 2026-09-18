@@ -7,12 +7,12 @@ import { requireFeature } from '@ipos-cloud/shared';
 
 // Absensi harian — kiosk PIN clock-in/out (§20). Tidak ada jadwal shift formal, cuma catat jam masuk/keluar.
 export async function tenantAttendanceRoutes(app: FastifyInstance) {
+  const db = (app as any).db;
   app.addHook('preHandler', tenantGuard);
 
-  app.get('/', { preHandler: requireFeature('absensi') }, async (request: any) => {
+  app.get('/', { preHandler: requireFeature(db, 'absensi') }, async (request: any) => {
     const { date } = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(request.query);
     const { tenant_id } = request.user as { tenant_id: string };
-    const db = (app as any).db;
     const rows = await db.select({
       id: attendance_logs.id, user_id: attendance_logs.user_id, user_name: users.name,
       clock_in_at: attendance_logs.clock_in_at, clock_out_at: attendance_logs.clock_out_at, status: attendance_logs.status,
@@ -27,10 +27,9 @@ export async function tenantAttendanceRoutes(app: FastifyInstance) {
   // pilih namanya sendiri dari daftar — user_id ini yang diabsen, bukan pemilik JWT kiosk.
   const clockBody = z.object({ user_id: z.string().uuid() });
 
-  app.post('/clock-in', { preHandler: requireFeature('absensi') }, async (request: any, reply) => {
+  app.post('/clock-in', { preHandler: requireFeature(db, 'absensi') }, async (request: any, reply) => {
     const { user_id } = clockBody.parse(request.body);
     const { tenant_id } = request.user as { tenant_id: string };
-    const db = (app as any).db;
     const today = new Date().toISOString().slice(0, 10);
     const now = new Date();
 
@@ -45,10 +44,9 @@ export async function tenantAttendanceRoutes(app: FastifyInstance) {
     return reply.code(201).send(row);
   });
 
-  app.post('/clock-out', { preHandler: requireFeature('absensi') }, async (request: any, reply) => {
+  app.post('/clock-out', { preHandler: requireFeature(db, 'absensi') }, async (request: any, reply) => {
     const { user_id } = clockBody.parse(request.body);
     const { tenant_id } = request.user as { tenant_id: string };
-    const db = (app as any).db;
     const today = new Date().toISOString().slice(0, 10);
 
     const [row] = await db.update(attendance_logs)

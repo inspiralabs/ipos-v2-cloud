@@ -7,11 +7,11 @@ import { requireFeature } from '@ipos-cloud/shared';
 
 // Multi-cabang: CRUD outlet + transfer bahan baku antar-cabang (Resto Pro & Business).
 export async function tenantBranchesRoutes(app: FastifyInstance) {
+  const db = (app as any).db;
   app.addHook('preHandler', tenantGuard);
 
-  app.get('/', { preHandler: requireFeature('multi_outlet') }, async (request: any) => {
+  app.get('/', { preHandler: requireFeature(db, 'multi_outlet') }, async (request: any) => {
     const { tenant_id } = request.user as { tenant_id: string };
-    const db = (app as any).db;
     return db.select().from(outlets).where(eq(outlets.tenant_id, tenant_id));
   });
 
@@ -21,18 +21,16 @@ export async function tenantBranchesRoutes(app: FastifyInstance) {
     phone: z.string().max(20).nullable().optional(),
   });
 
-  app.post('/', { preHandler: requireFeature('multi_outlet') }, async (request: any, reply) => {
+  app.post('/', { preHandler: requireFeature(db, 'multi_outlet') }, async (request: any, reply) => {
     const body = outletBody.parse(request.body);
     const { tenant_id } = request.user as { tenant_id: string };
-    const db = (app as any).db;
     const [row] = await db.insert(outlets).values({ ...body, tenant_id }).returning();
     return reply.code(201).send(row);
   });
 
-  app.put('/:id', { preHandler: requireFeature('multi_outlet') }, async (request: any, reply) => {
+  app.put('/:id', { preHandler: requireFeature(db, 'multi_outlet') }, async (request: any, reply) => {
     const body = outletBody.partial().parse(request.body);
     const { tenant_id } = request.user as { tenant_id: string };
-    const db = (app as any).db;
     const [row] = await db.update(outlets).set(body)
       .where(and(eq(outlets.id, request.params.id), eq(outlets.tenant_id, tenant_id)))
       .returning();
@@ -43,11 +41,11 @@ export async function tenantBranchesRoutes(app: FastifyInstance) {
 
 // Transfer bahan baku antar-cabang — request oleh siapa saja, approve/tolak khusus Owner/Admin.
 export async function tenantTransfersRoutes(app: FastifyInstance) {
+  const db = (app as any).db;
   app.addHook('preHandler', tenantGuard);
 
-  app.get('/', { preHandler: requireFeature('inter_branch_transfer') }, async (request: any) => {
+  app.get('/', { preHandler: requireFeature(db, 'inter_branch_transfer') }, async (request: any) => {
     const { tenant_id } = request.user as { tenant_id: string };
-    const db = (app as any).db;
     const transfers = await db.select().from(branch_transfers)
       .where(eq(branch_transfers.tenant_id, tenant_id)).orderBy(desc(branch_transfers.created_at));
     const items = await db.select().from(branch_transfer_items)
@@ -66,10 +64,9 @@ export async function tenantTransfersRoutes(app: FastifyInstance) {
     items: z.array(z.object({ ingredient_id: z.string().uuid(), qty: z.number().int().positive(), unit: z.string().max(20) })).min(1),
   });
 
-  app.post('/', { preHandler: requireFeature('inter_branch_transfer') }, async (request: any, reply) => {
+  app.post('/', { preHandler: requireFeature(db, 'inter_branch_transfer') }, async (request: any, reply) => {
     const body = transferBody.parse(request.body);
     const { tenant_id, sub } = request.user as { tenant_id: string; sub: string };
-    const db = (app as any).db;
     const [transfer] = await db.insert(branch_transfers).values({
       tenant_id, from_outlet_id: body.from_outlet_id, to_outlet_id: body.to_outlet_id,
       reason: body.reason, requested_by: sub,
@@ -81,13 +78,12 @@ export async function tenantTransfersRoutes(app: FastifyInstance) {
   });
 
   // Approve/tolak — role-gated di level app (Owner/Admin), dicek dari klaim JWT `role`.
-  app.post('/:id/decide', { preHandler: requireFeature('inter_branch_transfer') }, async (request: any, reply) => {
+  app.post('/:id/decide', { preHandler: requireFeature(db, 'inter_branch_transfer') }, async (request: any, reply) => {
     const { decision } = z.object({ decision: z.enum(['approved', 'rejected']) }).parse(request.body);
     const { tenant_id, sub, role } = request.user as { tenant_id: string; sub: string; role: string };
     if (!['owner', 'admin_staff', 'super_admin'].includes(role)) {
       return reply.code(403).send({ error: 'Hanya Owner/Admin yang bisa approve transfer', code: 'FORBIDDEN' });
     }
-    const db = (app as any).db;
     const [transfer] = await db.update(branch_transfers)
       .set({ status: decision, approved_by: sub, decided_at: new Date() })
       .where(and(eq(branch_transfers.id, request.params.id), eq(branch_transfers.tenant_id, tenant_id)))

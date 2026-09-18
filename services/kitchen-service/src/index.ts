@@ -47,7 +47,7 @@ app.get('/health', async () => ({ status: 'ok', service: 'kitchen-service', vers
 // Daftar tiket aktif buat layar dapur — join item order supaya KDS tidak perlu 2x call.
 app.get(
   '/api/v1/kitchen/tickets',
-  { preHandler: [requireAuth, requireFeature('kitchen_display')] },
+  { preHandler: [requireAuth, requireFeature(db, 'kitchen_display')] },
   async (req) => {
     const tid = tenantId(req);
     const tickets = await db.select().from(kitchen_tickets)
@@ -98,7 +98,7 @@ const statusTimestampField = { cooking: 'started_at', ready: 'ready_at', served:
 
 app.post(
   '/api/v1/kitchen/tickets/:id/status',
-  { preHandler: [requireAuth, requireFeature('kitchen_display')] },
+  { preHandler: [requireAuth, requireFeature(db, 'kitchen_display')] },
   async (req, reply) => {
     const { id } = req.params as { id: string };
     const { status } = statusBody.parse(req.body);

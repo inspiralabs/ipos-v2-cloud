@@ -46,13 +46,13 @@ const tableBody = z.object({
 
 app.get(
   '/api/v1/tables',
-  { preHandler: [requireAuth, requireFeature('table_management')] },
+  { preHandler: [requireAuth, requireFeature(db, 'table_management')] },
   async (req) => db.select().from(restaurant_tables).where(eq(restaurant_tables.tenant_id, tenantId(req)))
 );
 
 app.post(
   '/api/v1/tables',
-  { preHandler: [requireAuth, requireFeature('table_management')] },
+  { preHandler: [requireAuth, requireFeature(db, 'table_management')] },
   async (req, reply) => {
     const body = tableBody.parse(req.body);
     const [row] = await db.insert(restaurant_tables).values({
@@ -66,7 +66,7 @@ app.post(
 
 app.put(
   '/api/v1/tables/:id',
-  { preHandler: [requireAuth, requireFeature('table_management')] },
+  { preHandler: [requireAuth, requireFeature(db, 'table_management')] },
   async (req, reply) => {
     const body = tableBody.partial().parse(req.body);
     const { id } = req.params as { id: string };
@@ -81,7 +81,7 @@ app.put(
 
 app.delete(
   '/api/v1/tables/:id',
-  { preHandler: [requireAuth, requireFeature('table_management')] },
+  { preHandler: [requireAuth, requireFeature(db, 'table_management')] },
   async (req, reply) => {
     const { id } = req.params as { id: string };
     await db.delete(restaurant_tables)
@@ -93,7 +93,7 @@ app.delete(
 // Waiter update status meja (available/occupied/reserved/cleaning) dari floor map.
 app.post(
   '/api/v1/tables/:id/status',
-  { preHandler: [requireAuth, requireFeature('table_management')] },
+  { preHandler: [requireAuth, requireFeature(db, 'table_management')] },
   async (req, reply) => {
     const { id } = req.params as { id: string };
     const { status } = z.object({ status: z.enum(['available', 'occupied', 'reserved', 'cleaning']) }).parse(req.body);
@@ -111,7 +111,7 @@ app.post(
 // Simpan posisi tile setelah drag di canvas floor map editor (bulk, satu request per sesi drag).
 app.put(
   '/api/v1/tables/positions',
-  { preHandler: [requireAuth, requireFeature('table_management')] },
+  { preHandler: [requireAuth, requireFeature(db, 'table_management')] },
   async (req, reply) => {
     const { positions } = z.object({
       positions: z.array(z.object({ id: z.string().uuid(), position_x: z.number().int().min(0).max(100), position_y: z.number().int().min(0).max(100) })),
@@ -130,7 +130,7 @@ app.put(
 // yang login bisa print ini. Encode URL order publik, bukan cuma qr_token mentah.
 app.get(
   '/api/v1/tables/:id/qr-code',
-  { preHandler: [requireAuth, requireFeature('table_management')] },
+  { preHandler: [requireAuth, requireFeature(db, 'table_management')] },
   async (req, reply) => {
     const { id } = req.params as { id: string };
     const [row] = await db.select().from(restaurant_tables)

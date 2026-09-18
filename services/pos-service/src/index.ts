@@ -42,7 +42,7 @@ const openShiftBody = z.object({
   opening_cash: z.number().int().min(0).default(0),
 });
 
-app.post('/api/v1/pos/shifts', { preHandler: [requireAuth, requireFeature('shift_management')] }, async (req, reply) => {
+app.post('/api/v1/pos/shifts', { preHandler: [requireAuth, requireFeature(db, 'shift_management')] }, async (req, reply) => {
   const body = openShiftBody.parse(req.body);
   const user = jwtUser(req);
   const [existing] = await db.select({ id: pos_shifts.id })
@@ -69,7 +69,7 @@ app.get('/api/v1/pos/shifts/current', { preHandler: requireAuth }, async (req, r
   return row;
 });
 
-app.put('/api/v1/pos/shifts/:id/close', { preHandler: [requireAuth, requireFeature('shift_management')] }, async (req, reply) => {
+app.put('/api/v1/pos/shifts/:id/close', { preHandler: [requireAuth, requireFeature(db, 'shift_management')] }, async (req, reply) => {
   const { id } = req.params as { id: string };
   const { closing_cash, notes } = z.object({
     closing_cash: z.number().int().min(0).default(0),
@@ -208,7 +208,7 @@ app.get('/api/v1/pos/orders', { preHandler: requireAuth }, async (req) => {
   }));
 });
 
-app.post('/api/v1/pos/orders/:id/void', { preHandler: [requireAuth, requireFeature('void_transaction')] }, async (req, reply) => {
+app.post('/api/v1/pos/orders/:id/void', { preHandler: [requireAuth, requireFeature(db, 'void_transaction')] }, async (req, reply) => {
   const { id } = req.params as { id: string };
   const user = jwtUser(req);
   const [row] = await db.update(pos_orders)

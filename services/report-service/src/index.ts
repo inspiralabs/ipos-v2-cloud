@@ -122,7 +122,7 @@ app.get('/api/v1/reports/top-menu', { preHandler: requireAuth }, async (req) => 
 
 app.get(
   '/api/v1/reports/bottom-menu',
-  { preHandler: [requireAuth, requireFeature('advanced_report')] },
+  { preHandler: [requireAuth, requireFeature(db, 'advanced_report')] },
   async (req) => {
     const { from, to, limit } = menuRankQuery.parse(req.query);
     const user = jwtUser(req);
@@ -156,7 +156,7 @@ app.get(
 
 app.get(
   '/api/v1/reports/peak-hours',
-  { preHandler: [requireAuth, requireFeature('advanced_report')] },
+  { preHandler: [requireAuth, requireFeature(db, 'advanced_report')] },
   async (req) => {
     const { from, to } = dateRangeQuery.parse(req.query);
     const user = jwtUser(req);
@@ -247,7 +247,7 @@ app.get('/api/v1/reports/timeseries', { preHandler: requireAuth }, async (req) =
 
 app.get(
   '/api/v1/reports/food-cost',
-  { preHandler: [requireAuth, requireFeature('food_cost_report')] },
+  { preHandler: [requireAuth, requireFeature(db, 'food_cost_report')] },
   async (req) => {
     const user = jwtUser(req);
     const recipeRows = await db
@@ -279,7 +279,7 @@ app.get(
 
 app.get(
   '/api/v1/reports/waste',
-  { preHandler: [requireAuth, requireFeature('food_cost_report')] },
+  { preHandler: [requireAuth, requireFeature(db, 'food_cost_report')] },
   async (req) => {
     const { from, to } = dateRangeQuery.parse(req.query);
     const user = jwtUser(req);
@@ -309,7 +309,7 @@ app.get(
 
 app.get(
   '/api/v1/reports/pnl',
-  { preHandler: [requireAuth, requireFeature('pnl_report')] },
+  { preHandler: [requireAuth, requireFeature(db, 'pnl_report')] },
   async (req) => {
     const { from, to } = dateRangeQuery.parse(req.query);
     const user = jwtUser(req);
@@ -350,7 +350,7 @@ app.get(
 
 app.get(
   '/api/v1/reports/cashflow',
-  { preHandler: [requireAuth, requireFeature('pnl_report')] },
+  { preHandler: [requireAuth, requireFeature(db, 'pnl_report')] },
   async (req) => {
     const { from, to } = dateRangeQuery.parse(req.query);
     const user = jwtUser(req);
@@ -391,7 +391,7 @@ const expenseBody = z.object({
 
 app.post(
   '/api/v1/reports/expenses',
-  { preHandler: [requireAuth, requireFeature('pnl_report')] },
+  { preHandler: [requireAuth, requireFeature(db, 'pnl_report')] },
   async (req, reply) => {
     const body = expenseBody.parse(req.body);
     const user = jwtUser(req);
@@ -410,7 +410,7 @@ const wasteBody = z.object({
 
 app.post(
   '/api/v1/reports/waste',
-  { preHandler: [requireAuth, requireFeature('food_cost_report')] },
+  { preHandler: [requireAuth, requireFeature(db, 'food_cost_report')] },
   async (req, reply) => {
     const body = wasteBody.parse(req.body);
     const user = jwtUser(req);
