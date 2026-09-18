@@ -11,14 +11,18 @@ services:
       timeout: 5s
       retries: 3
 
+  # Tidak ada `ports:` di service backend mana pun — semuanya hanya dipanggil nginx
+  # lewat Docker network. Sebelumnya semua dipublish ke 0.0.0.0 sehingga gateway bisa
+  # dilewati total dari internet (mis. langsung ke :3002/api/v1/admin), dan
+  # notification-service terjangkau di :3009 padahal nginx.conf:38-40 sengaja menolak
+  # mengeksposnya. Kalau perlu akses dari host untuk debug:
+  #   docker compose exec auth-service wget -qO- http://localhost:3001/health
   auth-service:
     build:
       context: .
       dockerfile: Dockerfile
       args:
         SERVICE_NAME: auth-service
-    ports:
-      - "3001:3001"
     environment:
       PORT: 3001
       DATABASE_URL: ${DATABASE_URL}
@@ -38,8 +42,6 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE_NAME: tenant-service
-    ports:
-      - "3002:3002"
     environment:
       PORT: 3002
       DATABASE_URL: ${DATABASE_URL}
@@ -68,7 +70,6 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE_NAME: pos-service
-    ports: ["3003:3003"]
     environment:
       PORT: 3003
       DATABASE_URL: "${DATABASE_URL}"
@@ -87,7 +88,6 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE_NAME: catalog-service
-    ports: ["3004:3004"]
     environment:
       PORT: 3004
       DATABASE_URL: "${DATABASE_URL}"
@@ -107,7 +107,6 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE_NAME: inventory-service
-    ports: ["3005:3005"]
     environment: { PORT: 3005, DATABASE_URL: "${DATABASE_URL}", JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}", INTERNAL_API_KEY: "${INTERNAL_API_KEY}", CORS_ORIGIN: "${CORS_ORIGIN}" }
     restart: unless-stopped
 
@@ -117,7 +116,6 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE_NAME: kitchen-service
-    ports: ["3006:3006"]
     environment:
       PORT: 3006
       DATABASE_URL: "${DATABASE_URL}"
@@ -136,7 +134,6 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE_NAME: table-service
-    ports: ["3007:3007"]
     environment:
       PORT: 3007
       DATABASE_URL: "${DATABASE_URL}"
@@ -155,7 +152,6 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE_NAME: report-service
-    ports: ["3008:3008"]
     environment: { PORT: 3008, DATABASE_URL: "${DATABASE_URL}", JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}", CORS_ORIGIN: "${CORS_ORIGIN}" }
     restart: unless-stopped
 
@@ -165,7 +161,6 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE_NAME: notification-service
-    ports: ["3009:3009"]
     environment:
       PORT: 3009
       DATABASE_URL: ${DATABASE_URL}
@@ -181,7 +176,6 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE_NAME: websocket-gateway
-    ports: ["3011:3011"]
     environment:
       PORT: 3011
       JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}"
@@ -200,7 +194,7 @@ services:
         APP_NAME: admin-app
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     ports:
-      - "3010:3010"
+      - "127.0.0.1:3010:3010"
     environment:
       PORT: 3010
     depends_on:
@@ -216,7 +210,7 @@ services:
         APP_NAME: tenant-app
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     ports:
-      - "3012:3100"
+      - "127.0.0.1:3012:3100"
     environment:
       PORT: 3100
     depends_on:
@@ -227,7 +221,9 @@ services:
   nginx:
     image: nginx:alpine
     ports:
-      - "80:80"
+      # Hanya loopback: cloudflared jalan di host dan menembak localhost:80.
+      # 0.0.0.0 akan membuat gateway terjangkau langsung dari internet, melewati tunnel.
+      - "127.0.0.1:80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
