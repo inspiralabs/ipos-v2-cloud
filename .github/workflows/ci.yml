@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9 # samakan dengan `npm install -g pnpm@9` di Dockerfile
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # samakan dengan node:22-alpine di Dockerfile
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:packages # services & apps import dist/ dari packages/*
+      - run: pnpm -r type-check
+      - run: pnpm -r test

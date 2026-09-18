@@ -1,9 +1,6 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
 import { buildInsights } from './insights';
-
-function assert(condition: boolean, message: string) {
-  if (!condition) throw new Error(`FAIL: ${message}`);
-  console.log(`PASS: ${message}`);
-}
 
 const summary = {
   total_omzet: 1_000_000,
@@ -22,17 +19,22 @@ const peakHours = {
   by_day: [],
 };
 
-const insights = buildInsights(summary, topMenu, bottomMenu, peakHours, 'minggu lalu');
+test('data lengkap menghasilkan 4 insight yang benar', () => {
+  const insights = buildInsights(summary, topMenu, bottomMenu, peakHours, 'minggu lalu');
+  assert.equal(insights.length, 4);
+  assert.match(insights[0].message, /naik 25%/);
+  assert.equal(insights[0].severity, 'positive');
+  assert.match(insights[1].message, /Nasi Goreng/);
+  assert.match(insights[2].message, /Es Teh Tawar/);
+  assert.match(insights[3].message, /18:00/, 'peak hour memilih jam transaksi terbanyak (18, bukan 12)');
+});
 
-assert(insights.length === 4, 'menghasilkan 4 insight dari data lengkap');
-assert(insights[0].message.includes('naik 25%'), 'trend positif menyebut persen naik');
-assert(insights[0].severity === 'positive', 'trend naik severity positive');
-assert(insights[1].message.includes('Nasi Goreng'), 'top menu menyebut nama menu terlaris');
-assert(insights[2].message.includes('Es Teh Tawar'), 'bottom menu menyebut nama menu kurang laku');
-assert(insights[3].message.includes('18:00'), 'peak hour memilih jam dengan transaksi terbanyak (18, bukan 12)');
-
-const zeroSummary = { ...summary, previous_period: { total_omzet: 0, total_transactions: 0 }, change_percent: 0, total_omzet: 0 };
-const emptyInsights = buildInsights(zeroSummary, [], null, null, 'minggu lalu');
-assert(emptyInsights.length === 0, 'data kosong menghasilkan array kosong, bukan crash');
-
-console.log('Semua assertion lolos.');
+test('data kosong menghasilkan array kosong, bukan crash', () => {
+  const zeroSummary = {
+    ...summary,
+    total_omzet: 0,
+    change_percent: 0,
+    previous_period: { total_omzet: 0, total_transactions: 0 },
+  };
+  assert.deepEqual(buildInsights(zeroSummary, [], null, null, 'minggu lalu'), []);
+});
