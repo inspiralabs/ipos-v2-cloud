@@ -186,7 +186,7 @@ Menambahkan `decorate` di 4 service itu hanya menambal gejala — service ke-11 
 - Modify (call site): `services/inventory-service/src/index.ts:43, 72, 124, 130, 140, 155, 175, 185`
 - Modify (call site): `services/kitchen-service/src/index.ts:50, 101`
 - Modify (call site): `services/table-service/src/index.ts:49, 55, 69, 84, 96, 114, 133`
-- Modify (call site): `services/report-service/src/index.ts` (semua pemanggilan `requireFeature`)
+- Modify (call site): `services/report-service/src/index.ts:125, 159, 250, 282, 312, 353, 394, 413`
 - Modify (call site): `services/tenant-service/src/routes/tenant/attendance.ts:12, 30, 48`
 - Modify (call site): `services/tenant-service/src/routes/tenant/branches.ts:12, 24, 32, 48, 69`
 - Modify (call site): `services/tenant-service/src/routes/tenant/loyalty.ts:12, 27, 36, 47, 63, 82, 102`
@@ -303,7 +303,23 @@ export function requireFeature(db: Db, featureKey: string) {
 Run: `cd packages/shared && pnpm exec tsx --test "src/feature-gate.test.ts"`
 Expected: PASS 9/9 (5 lama + 4 baru).
 
-- [ ] **Step 5: Perbaiki semua call site sampai type-check bersih**
+- [ ] **Step 5: Perbaiki semua 44 call site sampai type-check bersih**
+
+Jumlah pemanggilan `requireFeature(` yang harus diubah — sudah dihitung, gunakan sebagai checklist:
+
+| File | Jumlah |
+|---|---|
+| `services/inventory-service/src/index.ts` | 8 |
+| `services/report-service/src/index.ts` | 8 |
+| `services/table-service/src/index.ts` | 7 |
+| `services/tenant-service/src/routes/tenant/loyalty.ts` | 7 |
+| `services/tenant-service/src/routes/tenant/branches.ts` | 6 |
+| `services/pos-service/src/index.ts` | 3 |
+| `services/tenant-service/src/routes/tenant/attendance.ts` | 3 |
+| `services/kitchen-service/src/index.ts` | 2 |
+| **Total** | **44** |
+
+Verifikasi jumlahnya sebelum mulai: `grep -rc "requireFeature(" services/*/src/index.ts services/tenant-service/src/routes/tenant/*.ts | grep -v ":0"`
 
 Run: `pnpm build:packages && pnpm -r type-check 2>&1 | grep -c error`
 
@@ -526,7 +542,7 @@ Pada `customers`: `tenantIdx: index('customers_tenant_id_idx').on(t.tenant_id)`.
 }, (t) => ({ clientIdx: index('offline_licenses_client_id_idx').on(t.client_id) }));
 ```
 
-Nama kolom di atas sudah diverifikasi terhadap schema: `leads.status` ada (`admin.ts:15`), `leads.deleted_at` ada (`admin.ts:23`), `restaurant_tables.status` ada (`restaurant.ts:12`), `kitchen_tickets.status` ada (`restaurant.ts:28`). Total `CREATE INDEX` yang diharapkan: **33**.
+Nama kolom di atas sudah diverifikasi terhadap schema: `leads.status` ada (`admin.ts:15`), `leads.deleted_at` ada (`admin.ts:23`), `restaurant_tables.status` ada (`restaurant.ts:12`), `kitchen_tickets.status` ada (`restaurant.ts:28`). Total `CREATE INDEX` yang diharapkan: **39** (auth 5, tenant 4, catalog 7, pos 4, restaurant 2, bom 2, resto 8, admin 5, offline 2).
 
 - [ ] **Step 6: Type-check schema sebelum generate**
 
@@ -547,7 +563,7 @@ Run: `cat packages/drizzle-schema/migrations/0017_*.sql`
 Verifikasi manual:
 - Setiap statement adalah `CREATE INDEX` (atau `CREATE INDEX IF NOT EXISTS`), **tidak ada** `DROP`, `ALTER TABLE ... DROP COLUMN`, atau `ALTER COLUMN`. Kalau ada, berarti `dist/` tadi basi — jalankan `pnpm --filter @ipos-cloud/drizzle-schema build` lalu generate ulang.
 - Semua nama tabel berprefix `"inspirapos_v2"."..."`.
-- Jumlah `CREATE INDEX` = **33**. Kalau hasilnya 34, kemungkinan index `qr_token` ikut terdeklarasi padahal kolomnya sudah unique — hapus.
+- Jumlah `CREATE INDEX` = **39**. Kalau 40, kemungkinan index `qr_token` ikut terdeklarasi padahal kolomnya sudah unique — hapus. Kalau kurang dari 39, ada tabel yang callback-nya belum ditambahkan.
 
 Run: `grep -c "CREATE INDEX" packages/drizzle-schema/migrations/0017_*.sql`
 Run: `grep -iE "DROP|ALTER COLUMN" packages/drizzle-schema/migrations/0017_*.sql || echo "bersih: tidak ada statement destruktif"`
@@ -683,14 +699,50 @@ export function planHasFeature(
 }
 ```
 
-- [ ] **Step 4: `feature-gate.ts` mengonsumsi file baru**
+- [ ] **Step 4: `feature-gate.ts` mengonsumsi file baru dan mendelegasikan cek tier**
 
-Di `packages/shared/src/feature-gate.ts`: hapus deklarasi `PLAN_FEATURES` (baris 7-35), ganti dengan re-export supaya pemanggil backend yang sudah ada tidak rusak:
+Di `packages/shared/src/feature-gate.ts`: hapus deklarasi `PLAN_FEATURES` (baris 7-35) dan ganti dengan re-export, supaya pemanggil backend yang sudah ada tidak rusak:
 
 ```ts
-import { PLAN_FEATURES } from './plan-features.js';
 export { PLAN_FEATURES, planHasFeature } from './plan-features.js';
+import { PLAN_FEATURES, planHasFeature } from './plan-features.js';
 ```
+
+Lalu **ganti bagian akhir `hasFeature`** (blok `const features = PLAN_FEATURES[plan]; ...` yang ditulis di Task 2) supaya mendelegasikan ke `planHasFeature`, bukan mengulang logikanya:
+
+```ts
+export async function hasFeature(
+  db: Db,
+  tenantId: string,
+  plan: TenantPlan | undefined | null,
+  featureKey: string
+): Promise<boolean> {
+  if (!plan) return false;
+
+  // WHERE sudah memfilter feature_key, jadi baris pertama (kalau ada) sudah pasti key yang dicari.
+  const [override] = await db
+    .select({ is_enabled: tenant_feature_overrides.is_enabled })
+    .from(tenant_feature_overrides)
+    .where(and(eq(tenant_feature_overrides.tenant_id, tenantId), eq(tenant_feature_overrides.feature_key, featureKey)))
+    .limit(1);
+
+  if (override) return override.is_enabled;
+
+  if (!PLAN_FEATURES[plan]) {
+    // plan_code default kolom adalah 'trial', yang bukan anggota TenantPlan. Dulu ini
+    // diam-diam mengembalikan false sehingga tenant kehilangan SEMUA fitur tanpa jejak.
+    console.warn(`[feature-gate] plan tidak dikenal "${plan}" untuk tenant ${tenantId} — semua fitur ditolak`);
+    return false;
+  }
+
+  // Delegasi, bukan duplikasi: satu-satunya beda antara versi backend dan versi
+  // browser adalah DARI MANA override-nya datang (query DB vs sudah di tangan).
+  // Cek tier-nya sama, jadi hanya ada satu implementasi.
+  return planHasFeature(plan, featureKey);
+}
+```
+
+Jangan disederhanakan lebih jauh: `PLAN_FEATURES[plan]` masih diperiksa untuk membedakan "plan tidak dikenal" dari "plan dikenal tapi tidak punya fitur itu". `planHasFeature` mengembalikan `false` untuk keduanya, jadi menghapus cek itu akan menghilangkan log peringatannya.
 
 - [ ] **Step 4b: Verifikasi blok PLAN_FEATURES benar-benar dipindah, bukan diketik ulang**
 
@@ -869,7 +921,7 @@ dipasang ke tabel yang mungkin sudah punya baris duplikat di produksi."
 - [ ] `pnpm -r type-check` bersih
 - [ ] `pnpm -r test` lulus, **28 test** total di workspace: `packages/shared` 19 (db 2 + redis 2 + feature-gate 9 + plan-features 6) + `report-service` 7 + `tenant-app` 2
 - [ ] `grep -rn "server\.db" packages services --include=*.ts | grep -v node_modules` → kosong
-- [ ] `grep -c "CREATE INDEX" packages/drizzle-schema/migrations/0017_*.sql` → 33
+- [ ] `grep -c "CREATE INDEX" packages/drizzle-schema/migrations/0017_*.sql` → 39
 - [ ] `apps/tenant-app/lib/plan-features.ts` tidak lagi memuat literal daftar fitur
 - [ ] Bundle `apps/tenant-app/.next/static` tidak memuat `pg`/`ioredis`
 - [ ] `pnpm --filter tenant-app build` dan `pnpm --filter admin-app build` sukses
