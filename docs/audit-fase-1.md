@@ -451,6 +451,126 @@ nilai beda (`--primary` oranye vs maroon — ini justru keuntungan kalau nama to
 
 ---
 
+## O. Runbook migrasi 0017 & 0018 — index dan constraint baru
+
+Ditulis setelah Modul 1 (index + constraint) selesai diimplementasi dan direview kode-nya, tapi
+**belum pernah dijalankan sekali pun terhadap Postgres asli** — tidak ada Postgres hidup di mesin
+pengembangan ini, dan Docker mati saat catatan ini ditulis. Dedupe DELETE di 0018 sudah diverifikasi
+benar secara statis (kasus 1/2/3 baris per key, NULL-safe, tie-safe, urutan sebelum DDL constraint,
+dan diff snapshot 37 tabel bersih), tapi "benar secara statis" bukan pengganti "pernah jalan". Bagian
+ini adalah prosedur yang wajib diikuti sebelum `pnpm db:migrate` disentuhkan ke database produksi.
+
+### O.1 Status keputusan `CONCURRENTLY` (Task 3 Step 9)
+
+Task 3 Step 9 di plan mensyaratkan: kalau produksi sudah punya data, dua index di tabel besar
+(`pos_orders`, `pos_order_items`) harus dibuat manual dengan `CREATE INDEX CONCURRENTLY` di luar
+`pnpm db:migrate`, karena `drizzle-kit migrate` membungkus **seluruh isi satu file migrasi** dalam
+satu transaksi — dan `CREATE INDEX CONCURRENTLY` tidak bisa jalan di dalam transaksi sama sekali,
+jadi opsi itu bukan "tambahkan kata CONCURRENTLY ke file yang sudah digenerate", melainkan
+"jalankan statement itu terpisah, di luar migrasi".
+
+Status sebenarnya: **langkah ini belum pernah dieksekusi maupun diputuskan secara eksplisit.**
+`0017_narrow_salo.sql` saat ini berisi 39 `CREATE INDEX IF NOT EXISTS` biasa (bukan `CONCURRENTLY`),
+termasuk dua index di atas, dan tidak ada catatan di commit maupun di sini bahwa "produksi masih
+kosong" pernah diverifikasi. Jangan anggap itu berarti aman.
+
+Efek nyatanya kalau `0017_narrow_salo.sql` dijalankan apa adanya lewat `pnpm db:migrate` terhadap
+database berisi data: drizzle membangun ke-39 index dalam satu transaksi, memegang `SHARE` lock di
+setiap tabel yang disentuh **selama seluruh migrasi berjalan** — bukan cuma selama index tabel itu
+sendiri dibangun. Karena `pos_orders` dan `pos_order_items` termasuk di antara 39 tabel itu dan
+kemungkinan besar tabel terbesar, setiap `INSERT`/`UPDATE` kasir ke kedua tabel itu (order baru,
+tutup shift, void) akan **memblokir** sampai seluruh migrasi selesai, bukan cuma sampai index
+tabel itu sendiri selesai.
+
+**Keputusan operasional untuk migrasi berikutnya:**
+- Kalau tabel `pos_orders` / `pos_order_items` di database target masih kosong atau kecil (baru
+  demo/staging): jalankan `0017_narrow_salo.sql` apa adanya lewat `pnpm db:migrate` — lock share
+  sesaat pada tabel kosong tidak berdampak.
+- Kalau sudah ada data produksi yang berarti (traffic kasir nyata): **jangan** jalankan
+  `0017_narrow_salo.sql` apa adanya. Hapus dua statement index `pos_orders_tenant_id_created_at_idx`
+  dan `pos_order_items_order_id_idx` dari eksekusi `db:migrate` (jalankan sisanya seperti biasa),
+  lalu bangun keduanya manual, di luar transaksi migrasi:
+
+```sql
+CREATE INDEX CONCURRENTLY IF NOT EXISTS pos_orders_tenant_id_created_at_idx
+  ON "inspirapos_v2"."pos_orders" (tenant_id, created_at);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS pos_order_items_order_id_idx
+  ON "inspirapos_v2"."pos_order_items" (order_id);
+```
+
+  Jalankan keduanya lewat `psql` langsung (mis. `psql "$DATABASE_URL" -c "..."`), satu statement per
+  koneksi, di luar jam sibuk. `CREATE INDEX CONCURRENTLY` tidak butuh lock eksklusif tapi butuh dua
+  scan tabel penuh dan bisa lebih lambat — itu memang harga dari "tidak memblokir kasir".
+
+### O.2 Backup sebelum 0018
+
+`0018_thick_wendell_rand.sql` menghapus baris (dedupe) sebelum menambahkan constraint. Wajib backup
+dua tabel yang terdampak sebelum menjalankannya, terlepas dari seberapa yakin dedupe-nya sudah benar:
+
+```bash
+pg_dump "$DATABASE_URL" \
+  --table='inspirapos_v2.menu_variant_groups' \
+  --table='inspirapos_v2.attendance_logs' \
+  --data-only --format=custom \
+  --file="backup-pre-0018-$(date +%Y%m%d%H%M%S).dump"
+```
+
+Restore (kalau perlu dibatalkan): `pg_restore --data-only --clean -d "$DATABASE_URL" <file>.dump`.
+
+### O.3 Count-first — jalankan SELECT sebelum DELETE
+
+Sebelum menjalankan `0018_thick_wendell_rand.sql`, jalankan versi `SELECT count(*)` dari kedua
+`DELETE` di migrasi itu (predikat ditranskripsi apa adanya dari file, tidak ditulis ulang) dan
+periksa angkanya masuk akal (mis. tidak mendekati 100% dari total baris tabel) sebelum lanjut.
+
+**Untuk `menu_variant_groups`** — DELETE aslinya pakai `USING` (self-join), jadi versi hitungnya
+memakai join yang sama lewat dua alias tabel di klausa `FROM`:
+
+```sql
+SELECT count(*) FROM "inspirapos_v2"."menu_variant_groups" a, "inspirapos_v2"."menu_variant_groups" b
+  WHERE a.ctid > b.ctid
+    AND a.menu_id = b.menu_id
+    AND a.variant_group_id = b.variant_group_id;
+```
+
+**Untuk `attendance_logs`** — predikat `WHERE` disalin langsung dari `DELETE`:
+
+```sql
+SELECT count(*) FROM "inspirapos_v2"."attendance_logs"
+  WHERE id NOT IN (
+    SELECT DISTINCT ON (tenant_id, user_id, date) id
+      FROM "inspirapos_v2"."attendance_logs"
+      ORDER BY tenant_id, user_id, date,
+               clock_out_at DESC NULLS LAST,
+               clock_in_at DESC NULLS LAST
+  );
+```
+
+Bandingkan hasil kedua `count(*)` itu dengan `SELECT count(*) FROM "inspirapos_v2"."menu_variant_groups"`
+dan `SELECT count(*) FROM "inspirapos_v2"."attendance_logs"` masing-masing — kalau angka yang akan
+dihapus mendekati total baris, **berhenti dan investigasi dulu**, jangan lanjut ke DELETE.
+
+### O.4 Rehearsal wajib di restore, bukan langsung produksi
+
+Sebelum `0017_narrow_salo.sql` dan `0018_thick_wendell_rand.sql` dijalankan terhadap database
+produksi asli:
+
+1. Restore dump produksi terbaru ke instance Postgres terpisah (staging/lokal).
+2. Jalankan `pnpm db:migrate` (atau urutan manual dari O.1 kalau `CONCURRENTLY` dipakai) end-to-end
+   terhadap restore itu — kedua file migrasi, bukan cuma salah satu.
+3. Verifikasi: aplikasi masih bisa baca/tulis `menu_variant_groups` dan `attendance_logs` setelah
+   migrasi, angka baris yang terhapus di O.3 cocok dengan yang benar-benar terhapus, dan tidak ada
+   error constraint saat aplikasi mencoba insert data yang sebelumnya duplikat.
+4. Baru setelah rehearsal ini bersih, jalankan urutan yang sama terhadap produksi.
+
+### O.5 Pernyataan status
+
+Sampai titik ini di branch, dedupe DELETE di `0018_thick_wendell_rand.sql` **belum pernah
+dieksekusi terhadap Postgres asli** — hanya dibaca dan diverifikasi secara statis. Langkah O.2–O.4
+di atas bukan formalitas; itu adalah pertama kalinya SQL ini akan benar-benar menyentuh baris data.
+
+---
+
 ## Yang sudah baik — jangan diubah
 
 1. **`password_reset_tokens` menyimpan hash**, dengan `expires_at` + `used_at`, dan

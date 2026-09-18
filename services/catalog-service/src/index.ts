@@ -231,12 +231,17 @@ app.put('/api/v1/catalog/menus/:id/variant-groups', { preHandler: requireAuth },
     .where(and(eq(menus.id, id), eq(menus.tenant_id, tid))).limit(1);
   if (!menu) return reply.code(404).send({ error: 'Menu not found' });
 
-  await db.delete(menu_variant_groups).where(and(eq(menu_variant_groups.menu_id, id), eq(menu_variant_groups.tenant_id, tid)));
-  if (group_ids.length) {
-    await db.insert(menu_variant_groups).values(
-      group_ids.map((gid) => ({ menu_id: id, variant_group_id: gid, tenant_id: tid }))
-    );
-  }
+  // Transaksi: kalau INSERT gagal (mis. variant_group_id bukan milik tenant -> 23503,
+  // atau tabrakan PK dari request PUT yang konkuren -> 23505), DELETE di atasnya wajib
+  // ikut batal — tanpa ini menu bisa berakhir dengan nol variant group.
+  await db.transaction(async (tx) => {
+    await tx.delete(menu_variant_groups).where(and(eq(menu_variant_groups.menu_id, id), eq(menu_variant_groups.tenant_id, tid)));
+    if (group_ids.length) {
+      await tx.insert(menu_variant_groups).values(
+        group_ids.map((gid) => ({ menu_id: id, variant_group_id: gid, tenant_id: tid }))
+      );
+    }
+  });
   return { ok: true, group_ids };
 });
 

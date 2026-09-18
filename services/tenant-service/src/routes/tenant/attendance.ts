@@ -3,11 +3,15 @@ import { z } from 'zod';
 import { eq, and } from 'drizzle-orm';
 import { attendance_logs, users } from '@ipos-cloud/drizzle-schema';
 import { tenantGuard } from '../../middleware/admin-guard.js';
-import { requireFeature } from '@ipos-cloud/shared';
+import { requireFeature, type Db } from '@ipos-cloud/shared';
 
 // Absensi harian — kiosk PIN clock-in/out (§20). Tidak ada jadwal shift formal, cuma catat jam masuk/keluar.
 export async function tenantAttendanceRoutes(app: FastifyInstance) {
-  const db = (app as any).db;
+  const db = (app as any).db as Db;
+  // Cast di atas cuma lolos type-check kalau db memang ada — kalau app.decorate('db', db)
+  // di index.ts pernah pindah ke bawah app.register(...) ini, db diam-diam jadi undefined
+  // dan requireFeature gagal di setiap request. Gagal saat boot lebih baik daripada 500 diam-diam.
+  if (!db) throw new Error('tenant-service: app.decorate("db") harus dipanggil sebelum register route ini');
   app.addHook('preHandler', tenantGuard);
 
   app.get('/', { preHandler: requireFeature(db, 'absensi') }, async (request: any) => {

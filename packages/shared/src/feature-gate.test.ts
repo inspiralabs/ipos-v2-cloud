@@ -45,6 +45,25 @@ test('plan null: selalu false walau ada override', async () => {
   assert.equal(await hasFeature(db, 'tenant-1', null, 'basic_pos'), false);
 });
 
+test('plan tidak dikenal ("trial", default kolom plan_code): hasFeature = false', async () => {
+  const db = fakeDb([]);
+  // 'trial' bukan anggota TenantPlan tapi memang nilai default kolom tenants.plan_code —
+  // ini branch yang membedakan hasFeature dari sekadar delegasi ke planHasFeature (lihat
+  // komentar di feature-gate.ts: PLAN_FEATURES[plan] dicek dulu supaya console.warn tidak hilang).
+  // Warn di-stub supaya output test tetap bersih, sekaligus jadi bukti branch itu terpicu.
+  const originalWarn = console.warn;
+  const warnCalls: unknown[][] = [];
+  console.warn = (...args: unknown[]) => { warnCalls.push(args); };
+  try {
+    const result = await hasFeature(db, 'tenant-1', 'trial' as unknown as import('./types.js').TenantPlan, 'basic_pos');
+    assert.equal(result, false);
+    assert.equal(warnCalls.length, 1, 'plan tidak dikenal harus memicu console.warn tepat sekali');
+    assert.match(String(warnCalls[0][0]), /plan tidak dikenal/);
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
 import { requireFeature } from './feature-gate.js';
 
 function fakeReply() {

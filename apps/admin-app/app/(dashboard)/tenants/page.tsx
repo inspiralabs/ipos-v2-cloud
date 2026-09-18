@@ -198,8 +198,9 @@ function HardDeleteDialog({ tenant, open, onOpenChange, onConfirm }: {
   );
 }
 
-/** Wajib sinkron dengan PLAN_FEATURES di packages/shared/feature-gate.ts — nilai lain (mis. 'pro')
- * tidak dikenali gate manapun dan diam-diam mengunci semua fitur berbayar. */
+/** Wajib sinkron dengan PLAN_FEATURES di packages/shared/src/plan-features.ts (subpath export
+ * @ipos-cloud/shared/plan-features) — nilai lain (mis. 'pro') tidak dikenali gate manapun dan
+ * diam-diam mengunci semua fitur berbayar. */
 const PLAN_OPTIONS = [
   { value: 'umkm_lite', label: 'UMKM Lite' },
   { value: 'umkm_pro', label: 'UMKM Pro' },
@@ -210,7 +211,7 @@ const PLAN_OPTIONS = [
 ] as const;
 
 /** Add-on: fitur di luar bawaan tier, dinyalakan per tenant lewat tenant_feature_overrides.
- * Key harus match salah satu feature_key di packages/shared/feature-gate.ts PLAN_FEATURES. */
+ * Key harus match salah satu feature_key di packages/shared/src/plan-features.ts PLAN_FEATURES. */
 const ADDON_OPTIONS = [
   { key: 'stock_management', label: 'Dashboard Stok Real-time' },
   { key: 'advanced_report', label: 'Food Cost / HPP Otomatis' },
