@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, text, integer } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, timestamp, text, integer, index } from 'drizzle-orm/pg-core';
 import { inspirapos, users } from './auth.js';
 import { tenants, outlets, customers } from './tenant.js';
 
@@ -15,7 +15,10 @@ export const pos_shifts = inspirapos.table('pos_shifts', {
   closed_at: timestamp('closed_at', { withTimezone: true }),
   notes: text('notes'),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // cek "ada shift terbuka?" memfilter tenant + status.
+  tenantStatusIdx: index('pos_shifts_tenant_id_status_idx').on(t.tenant_id, t.status),
+}));
 
 export const pos_orders = inspirapos.table('pos_orders', {
   id: uuid('id').primaryKey(), // client-supplied UUID for offline-first
@@ -37,7 +40,11 @@ export const pos_orders = inspirapos.table('pos_orders', {
   notes: text('notes'),
   created_at: timestamp('created_at', { withTimezone: true }).notNull(), // from client
   synced_at: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // index terpenting di seluruh database: dipakai SEMUA laporan, dashboard, dan list order.
+  tenantCreatedIdx: index('pos_orders_tenant_id_created_at_idx').on(t.tenant_id, t.created_at),
+  shiftIdx: index('pos_orders_shift_id_idx').on(t.shift_id),
+}));
 
 export const pos_order_items = inspirapos.table('pos_order_items', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -48,4 +55,7 @@ export const pos_order_items = inspirapos.table('pos_order_items', {
   price: integer('price').notNull(), // harga per unit SUDAH termasuk selisih variasi
   qty: integer('qty').notNull(),
   notes: text('notes'),
-});
+}, (t) => ({
+  // FK order_id tanpa index; setiap join struk & laporan lewat sini
+  orderIdx: index('pos_order_items_order_id_idx').on(t.order_id),
+}));

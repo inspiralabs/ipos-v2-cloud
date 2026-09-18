@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, text, jsonb, integer, date, inet } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, timestamp, text, jsonb, integer, date, inet, index } from 'drizzle-orm/pg-core';
 import { inspirapos, users } from './auth.js';
 import { tenants } from './tenant.js';
 import { offline_clients } from './offline.js';
@@ -21,7 +21,10 @@ export const leads = inspirapos.table('leads', {
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deleted_at: timestamp('deleted_at', { withTimezone: true }), // soft-delete — null = aktif
-});
+}, (t) => ({
+  deletedIdx: index('leads_deleted_at_idx').on(t.deleted_at),
+  statusIdx: index('leads_status_idx').on(t.status),
+}));
 
 // History catatan lead — append-only (bukan 1 kolom overwrite) supaya admin bisa lihat
 // kapan tiap catatan ditulis, termasuk catatan awal dari klien sendiri (saat pilih "Belum tahu").
@@ -32,7 +35,9 @@ export const lead_notes = inspirapos.table('lead_notes', {
   author: varchar('author', { length: 20 }).notNull().default('admin'), // client | admin
   created_by: uuid('created_by').references(() => users.id), // null kalau author = client
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  leadIdx: index('lead_notes_lead_id_idx').on(t.lead_id),
+}));
 
 export const early_access_signups = inspirapos.table('early_access_signups', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -59,7 +64,9 @@ export const billing_records = inspirapos.table('billing_records', {
   recorded_by: uuid('recorded_by').notNull().references(() => users.id),
   paid_at: date('paid_at').notNull(),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  tenantIdx: index('billing_records_tenant_id_idx').on(t.tenant_id),
+}));
 
 export const admin_audit_logs = inspirapos.table('admin_audit_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -73,7 +80,10 @@ export const admin_audit_logs = inspirapos.table('admin_audit_logs', {
   ip_address: inet('ip_address'),
   user_agent: text('user_agent'),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // halaman audit mengurut created_at desc
+  createdIdx: index('admin_audit_logs_created_at_idx').on(t.created_at),
+}));
 
 export const notification_templates = inspirapos.table('notification_templates', {
   id: uuid('id').primaryKey().defaultRandom(),

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, text, jsonb, unique } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, timestamp, text, jsonb, unique, index } from 'drizzle-orm/pg-core';
 import { inspirapos, users } from './auth.js';
 
 export const tenants = inspirapos.table('tenants', {
@@ -22,7 +22,11 @@ export const tenants = inspirapos.table('tenants', {
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deleted_at: timestamp('deleted_at', { withTimezone: true }), // soft-delete — null = aktif
-});
+}, (t) => ({
+  // semua list admin memfilter deleted_at IS NULL.
+  deletedIdx: index('tenants_deleted_at_idx').on(t.deleted_at),
+  statusIdx: index('tenants_status_idx').on(t.status),
+}));
 
 export const outlets = inspirapos.table('outlets', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -32,7 +36,9 @@ export const outlets = inspirapos.table('outlets', {
   phone: varchar('phone', { length: 20 }),
   is_active: boolean('is_active').notNull().default(true),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  tenantIdx: index('outlets_tenant_id_idx').on(t.tenant_id),
+}));
 
 export const tenant_feature_overrides = inspirapos.table('tenant_feature_overrides', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -52,4 +58,6 @@ export const customers = inspirapos.table('customers', {
   name: varchar('name', { length: 255 }).notNull(),
   phone: varchar('phone', { length: 20 }),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  tenantIdx: index('customers_tenant_id_idx').on(t.tenant_id),
+}));

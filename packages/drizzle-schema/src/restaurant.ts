@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, integer, timestamp, text } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, integer, timestamp, text, index } from 'drizzle-orm/pg-core';
 import { inspirapos } from './auth.js';
 import { tenants, outlets } from './tenant.js';
 import { pos_orders } from './pos.js';
@@ -18,7 +18,10 @@ export const restaurant_tables = inspirapos.table('restaurant_tables', {
   qr_token: varchar('qr_token', { length: 100 }).notNull().unique(), // dipakai di /order/{qr_token} untuk QR self-order
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // qr_token sudah .notNull().unique(), Postgres sudah membuat index untuknya — jangan tambah lagi.
+  tenantIdx: index('restaurant_tables_tenant_id_idx').on(t.tenant_id),
+}));
 
 // Satu tiket dapur per order (KDS) — status berpindah pending -> cooking -> ready -> served.
 export const kitchen_tickets = inspirapos.table('kitchen_tickets', {
@@ -32,4 +35,7 @@ export const kitchen_tickets = inspirapos.table('kitchen_tickets', {
   started_at: timestamp('started_at', { withTimezone: true }),
   ready_at: timestamp('ready_at', { withTimezone: true }),
   served_at: timestamp('served_at', { withTimezone: true }),
-});
+}, (t) => ({
+  // KDS memfilter tenant + status; order_id sudah .unique()
+  tenantStatusIdx: index('kitchen_tickets_tenant_id_status_idx').on(t.tenant_id, t.status),
+}));

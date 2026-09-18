@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, integer, timestamp, text, date } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, integer, timestamp, text, date, index } from 'drizzle-orm/pg-core';
 import { inspirapos, users } from './auth.js';
 import { tenants, outlets } from './tenant.js';
 import { ingredients } from './bom.js';
@@ -16,7 +16,9 @@ export const branch_transfers = inspirapos.table('branch_transfers', {
   approved_by: uuid('approved_by').references(() => users.id),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   decided_at: timestamp('decided_at', { withTimezone: true }),
-});
+}, (t) => ({
+  tenantIdx: index('branch_transfers_tenant_id_idx').on(t.tenant_id),
+}));
 
 export const branch_transfer_items = inspirapos.table('branch_transfer_items', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -24,7 +26,9 @@ export const branch_transfer_items = inspirapos.table('branch_transfer_items', {
   ingredient_id: uuid('ingredient_id').notNull().references(() => ingredients.id, { onDelete: 'cascade' }),
   qty: integer('qty').notNull(),
   unit: varchar('unit', { length: 20 }).notNull(), // snapshot ingredients.unit saat request dibuat
-});
+}, (t) => ({
+  transferIdx: index('branch_transfer_items_transfer_id_idx').on(t.transfer_id),
+}));
 
 // ── Loyalty program (Resto Pro & Business) ────────────────────────────────────
 
@@ -36,7 +40,10 @@ export const loyalty_members = inspirapos.table('loyalty_members', {
   phone: varchar('phone', { length: 20 }).notNull(),
   points_balance: integer('points_balance').notNull().default(0),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // lookup member pakai nomor HP
+  tenantPhoneIdx: index('loyalty_members_tenant_id_phone_idx').on(t.tenant_id, t.phone),
+}));
 
 export const loyalty_point_logs = inspirapos.table('loyalty_point_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -46,7 +53,9 @@ export const loyalty_point_logs = inspirapos.table('loyalty_point_logs', {
   reason: varchar('reason', { length: 100 }).notNull(), // order_earn | manual_redeem | manual_adjust
   order_id: uuid('order_id'),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  tenantMemberIdx: index('loyalty_point_logs_tenant_id_member_id_idx').on(t.tenant_id, t.member_id),
+}));
 
 export const loyalty_broadcasts = inspirapos.table('loyalty_broadcasts', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -56,7 +65,9 @@ export const loyalty_broadcasts = inspirapos.table('loyalty_broadcasts', {
   recipient_count: integer('recipient_count').notNull().default(0),
   sent_by: uuid('sent_by').notNull().references(() => users.id),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  tenantIdx: index('loyalty_broadcasts_tenant_id_idx').on(t.tenant_id),
+}));
 
 // ── Absensi karyawan (bundled Resto Starter+) ─────────────────────────────────
 // Staff = users yang sudah ada (role cashier/kitchen_staff/waiter/manager, sudah punya outlet_id) —
@@ -70,7 +81,10 @@ export const attendance_logs = inspirapos.table('attendance_logs', {
   clock_in_at: timestamp('clock_in_at', { withTimezone: true }),
   clock_out_at: timestamp('clock_out_at', { withTimezone: true }),
   status: varchar('status', { length: 20 }).notNull().default('hadir'), // hadir | telat | alpha
-});
+}, (t) => ({
+  // rekap absensi per tenant per tanggal
+  tenantDateIdx: index('attendance_logs_tenant_id_date_idx').on(t.tenant_id, t.date),
+}));
 
 // ── Biaya operasional & waste (input manual owner, buat P&L / Laporan Waste) ──
 
@@ -84,7 +98,10 @@ export const operational_expenses = inspirapos.table('operational_expenses', {
   spent_at: date('spent_at').notNull(),
   created_by: uuid('created_by').notNull().references(() => users.id),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // laporan P&L memfilter tenant + rentang tanggal
+  tenantSpentIdx: index('operational_expenses_tenant_id_spent_at_idx').on(t.tenant_id, t.spent_at),
+}));
 
 export const ingredient_waste_logs = inspirapos.table('ingredient_waste_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -95,4 +112,6 @@ export const ingredient_waste_logs = inspirapos.table('ingredient_waste_logs', {
   reason: varchar('reason', { length: 100 }), // kadaluarsa | rusak | salah_masak | lainnya
   recorded_by: uuid('recorded_by').notNull().references(() => users.id),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  tenantIdx: index('ingredient_waste_logs_tenant_id_idx').on(t.tenant_id),
+}));

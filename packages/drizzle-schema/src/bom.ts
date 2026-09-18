@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, integer, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, integer, timestamp, index } from 'drizzle-orm/pg-core';
 import { inspirapos } from './auth.js';
 import { tenants } from './tenant.js';
 import { menus } from './catalog.js';
@@ -14,7 +14,9 @@ export const ingredients = inspirapos.table('ingredients', {
   cost_per_unit: integer('cost_per_unit').notNull().default(0), // harga beli per satuan terkecil (Rp) — dasar hitung HPP/food cost
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  tenantIdx: index('ingredients_tenant_id_idx').on(t.tenant_id),
+}));
 
 // BOM: resep menu = daftar bahan baku + qty terpakai per satu porsi.
 export const recipe_items = inspirapos.table('recipe_items', {
@@ -23,4 +25,7 @@ export const recipe_items = inspirapos.table('recipe_items', {
   menu_id: uuid('menu_id').notNull().references(() => menus.id, { onDelete: 'cascade' }),
   ingredient_id: uuid('ingredient_id').notNull().references(() => ingredients.id, { onDelete: 'cascade' }),
   qty_used: integer('qty_used').notNull(), // satuan sama dengan ingredients.unit
-});
+}, (t) => ({
+  // BOM dibaca per menu
+  tenantMenuIdx: index('recipe_items_tenant_id_menu_id_idx').on(t.tenant_id, t.menu_id),
+}));

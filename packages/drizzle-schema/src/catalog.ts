@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, text, integer } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, timestamp, text, integer, index } from 'drizzle-orm/pg-core';
 import { inspirapos } from './auth.js';
 import { tenants } from './tenant.js';
 
@@ -10,7 +10,9 @@ export const categories = inspirapos.table('categories', {
   is_active: boolean('is_active').notNull().default(true),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  tenantIdx: index('categories_tenant_id_idx').on(t.tenant_id),
+}));
 
 export const menus = inspirapos.table('menus', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -28,7 +30,10 @@ export const menus = inspirapos.table('menus', {
   sort_order: integer('sort_order').notNull().default(0),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // halaman menu memfilter tenant lalu mengelompokkan per kategori
+  tenantCategoryIdx: index('menus_tenant_id_category_id_idx').on(t.tenant_id, t.category_id),
+}));
 
 // Grup variasi tersimpan (mis. "Level Pedas") — dibuat sekali, dipasang ke banyak menu.
 export const variant_groups = inspirapos.table('variant_groups', {
@@ -38,7 +43,9 @@ export const variant_groups = inspirapos.table('variant_groups', {
   selection: varchar('selection', { length: 10 }).notNull().default('single'), // single | multi
   required: boolean('required').notNull().default(false),
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  tenantIdx: index('variant_groups_tenant_id_idx').on(t.tenant_id),
+}));
 
 export const variant_options = inspirapos.table('variant_options', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -47,14 +54,20 @@ export const variant_options = inspirapos.table('variant_options', {
   name: varchar('name', { length: 255 }).notNull(),
   price_delta: integer('price_delta').notNull().default(0), // selisih harga; bisa 0 atau negatif
   sort_order: integer('sort_order').notNull().default(0),
-});
+}, (t) => ({
+  groupIdx: index('variant_options_group_id_idx').on(t.group_id),
+}));
 
 // Pasang grup variasi ke menu (many-to-many).
 export const menu_variant_groups = inspirapos.table('menu_variant_groups', {
   menu_id: uuid('menu_id').notNull().references(() => menus.id, { onDelete: 'cascade' }),
   variant_group_id: uuid('variant_group_id').notNull().references(() => variant_groups.id, { onDelete: 'cascade' }),
   tenant_id: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-});
+}, (t) => ({
+  // tabel join, kedua arah dipakai
+  menuIdx: index('menu_variant_groups_menu_id_idx').on(t.menu_id),
+  groupIdx: index('menu_variant_groups_variant_group_id_idx').on(t.variant_group_id),
+}));
 
 export const stock_levels = inspirapos.table('stock_levels', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -63,4 +76,7 @@ export const stock_levels = inspirapos.table('stock_levels', {
   stock_qty: integer('stock_qty').notNull().default(0),
   low_stock_threshold: integer('low_stock_threshold').notNull().default(5),
   updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // menu_id sudah .unique(); yang kurang hanya tenant_id
+  tenantIdx: index('stock_levels_tenant_id_idx').on(t.tenant_id),
+}));

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, text } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, text, index } from 'drizzle-orm/pg-core';
 import { inspirapos, users } from './auth.js';
 
 export const offline_clients = inspirapos.table('offline_clients', {
@@ -11,7 +11,9 @@ export const offline_clients = inspirapos.table('offline_clients', {
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deleted_at: timestamp('deleted_at', { withTimezone: true }), // soft-delete — null = aktif
-});
+}, (t) => ({
+  deletedIdx: index('offline_clients_deleted_at_idx').on(t.deleted_at),
+}));
 
 export const offline_licenses = inspirapos.table('offline_licenses', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -24,4 +26,6 @@ export const offline_licenses = inspirapos.table('offline_licenses', {
   created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   revoked_at: timestamp('revoked_at', { withTimezone: true }),
   revoked_by: uuid('revoked_by').references(() => users.id),
-});
+}, (t) => ({
+  clientIdx: index('offline_licenses_client_id_idx').on(t.client_id),
+}));
