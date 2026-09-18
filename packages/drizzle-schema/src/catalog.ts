@@ -64,8 +64,8 @@ export const menu_variant_groups = inspirapos.table('menu_variant_groups', {
   variant_group_id: uuid('variant_group_id').notNull().references(() => variant_groups.id, { onDelete: 'cascade' }),
   tenant_id: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
 }, (t) => ({
-  // tabel join, kedua arah dipakai
   pk: primaryKey({ columns: [t.menu_id, t.variant_group_id] }),
+  // tabel join, kedua arah dipakai
   menuIdx: index('menu_variant_groups_menu_id_idx').on(t.menu_id),
   groupIdx: index('menu_variant_groups_variant_group_id_idx').on(t.variant_group_id),
 }));

@@ -38,10 +38,16 @@ export async function tenantAttendanceRoutes(app: FastifyInstance) {
     if (existing) return reply.code(409).send({ error: 'Sudah absen masuk hari ini', code: 'ALREADY_CLOCKED_IN' });
 
     const status = now.getHours() >= 9 ? 'telat' : 'hadir'; // ponytail: jam masuk tetap 09:00, ubah kalau nanti butuh per-tenant
-    const [row] = await db.insert(attendance_logs).values({
-      tenant_id, user_id, date: today, clock_in_at: now, status,
-    }).returning();
-    return reply.code(201).send(row);
+    try {
+      const [row] = await db.insert(attendance_logs).values({
+        tenant_id, user_id, date: today, clock_in_at: now, status,
+      }).returning();
+      return reply.code(201).send(row);
+    } catch (err: any) {
+      // race dengan request clock-in lain untuk user/hari yang sama — constraint unique menang, balas 409 seperti cek di atas
+      if (err?.code === '23505') return reply.code(409).send({ error: 'Sudah absen masuk hari ini', code: 'ALREADY_CLOCKED_IN' });
+      throw err;
+    }
   });
 
   app.post('/clock-out', { preHandler: requireFeature(db, 'absensi') }, async (request: any, reply) => {

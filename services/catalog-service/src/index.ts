@@ -221,7 +221,11 @@ app.get('/api/v1/catalog/menu-variant-groups', { preHandler: requireAuth }, asyn
 // Set daftar grup untuk satu menu (replace semua).
 app.put('/api/v1/catalog/menus/:id/variant-groups', { preHandler: requireAuth }, async (req, reply) => {
   const { id } = req.params as { id: string };
-  const { group_ids } = z.object({ group_ids: z.array(z.string().uuid()) }).parse(req.body);
+  // dedupe di sini karena menu_variant_groups sekarang punya PK (menu_id, variant_group_id) —
+  // id ganda di payload bikin insert batch di bawah gagal kena constraint, padahal DELETE di atasnya sudah commit
+  const { group_ids } = z.object({
+    group_ids: z.array(z.string().uuid()).transform((ids) => [...new Set(ids)]),
+  }).parse(req.body);
   const tid = tenantId(req);
   const [menu] = await db.select({ id: menus.id }).from(menus)
     .where(and(eq(menus.id, id), eq(menus.tenant_id, tid))).limit(1);
