@@ -3,7 +3,7 @@ import { z } from 'zod';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { eq, and, gt, isNull } from 'drizzle-orm';
-import { users, password_reset_tokens } from '@ipos-cloud/drizzle-schema';
+import { users, password_reset_tokens, sessions } from '@ipos-cloud/drizzle-schema';
 
 function hashToken(token: string) {
   return crypto.createHash('sha256').update(token).digest('hex');
@@ -31,6 +31,11 @@ export async function resetPasswordRoute(app: FastifyInstance) {
     const password_hash = await bcrypt.hash(password, 10);
     await db.update(users).set({ password_hash, updated_at: new Date() }).where(eq(users.id, row.user_id));
     await db.update(password_reset_tokens).set({ used_at: new Date() }).where(eq(password_reset_tokens.id, row.id));
+
+    // Ganti password HARUS mencabut sesi yang sudah ada. Tanpa ini, penyerang yang
+    // sudah memegang refresh_token tetap punya akses 30 hari walau korban sudah
+    // mengganti passwordnya — justru skenario yang membuat orang mereset password.
+    await db.delete(sessions).where(eq(sessions.user_id, row.user_id));
 
     return { ok: true };
   });
