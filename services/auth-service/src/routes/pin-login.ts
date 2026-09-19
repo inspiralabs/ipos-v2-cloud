@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { eq, and, isNotNull } from 'drizzle-orm';
-import { users, tenants } from '@ipos-cloud/drizzle-schema';
+import { users, tenants, sessions } from '@ipos-cloud/drizzle-schema';
 import { MAX_PIN_ATTEMPTS, isPinLocked, registerFailedPin, clearPinAttempts } from '../pin-attempts.js';
 
 // PIN login cepat — ganti kasir/staf tanpa logout penuh (§21). Dipanggil dari tenant-app yang
@@ -66,6 +66,42 @@ export async function pinLoginRoutes(app: FastifyInstance) {
     }
 
     await clearPinAttempts(redis, body.user_id);
-    // ... lanjut ke penerbitan token (diubah lagi di Task 5) ...
+
+    const [tenant] = await db.select({ plan_code: tenants.plan_code }).from(tenants)
+      .where(eq(tenants.id, body.tenant_id)).limit(1);
+
+    const token = app.jwt.sign({
+      sub: user.id, tenant_id: body.tenant_id, role: user.role,
+      plan: tenant?.plan_code ?? null, outlet_id: user.outlet_id ?? null,
+    });
+
+    // Ganti kasir HARUS mengganti sesi, bukan cuma menerbitkan access token baru.
+    // Sebelumnya cookie refresh_token kasir lama dibiarkan utuh, jadi setelah 15 menit
+    // /refresh mengembalikan identitas kasir SEBELUMNYA dan transaksi tercatat atas
+    // nama orang yang salah.
+    const previous = request.cookies.refresh_token;
+    if (previous) {
+      await db.delete(sessions).where(eq(sessions.refresh_token, previous));
+    }
+
+    const refresh_token = crypto.randomUUID();
+    const expires_at = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await db.insert(sessions).values({
+      user_id: user.id,
+      refresh_token,
+      expires_at,
+      ip_address: request.ip,
+      user_agent: request.headers['user-agent'],
+    });
+
+    reply.setCookie('refresh_token', refresh_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+      expires: expires_at,
+    });
+
+    return { access_token: token, expires_in: 900, user: { id: user.id, name: user.name, role: user.role } };
   });
 }

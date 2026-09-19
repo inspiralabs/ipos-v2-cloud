@@ -102,3 +102,50 @@ test('PIN salah berulang mengunci akun', async () => {
   assert.equal(correct.statusCode, 429, 'lockout harus berlaku walau PIN-nya benar');
   await app.close();
 });
+
+test('pin-login membuat baris sessions dan mengganti cookie refresh_token', async () => {
+  const pin_hash = await bcrypt.hash('1234', 4);
+  const db = fakeDb({
+    users: [{ ...STAFF, pin_hash }],
+    tenants: [{ id: TENANT, plan_code: 'resto_pro' }],
+    sessions: [],
+  });
+  const app = await buildTestApp({ db, redis: fakeRedisForApp(), routes: [[pinLoginRoutes, '/api/v1/auth']] });
+
+  const res = await app.inject({
+    method: 'POST', url: '/api/v1/auth/pin-login',
+    // Cookie kasir SEBELUMNYA masih terpasang di perangkat.
+    headers: { cookie: 'refresh_token=token-kasir-lama' },
+    payload: { tenant_id: TENANT, user_id: STAFF.id, pin: '1234' },
+  });
+
+  assert.equal(res.statusCode, 200);
+
+  const inserted = db._writes.find((w: any) => w.op === 'insert' && w.table === 'sessions');
+  assert.ok(inserted, 'pin-login harus membuat baris sessions untuk kasir baru');
+  assert.equal((inserted.values as any).user_id, STAFF.id);
+
+  const setCookie = String(res.headers['set-cookie'] ?? '');
+  assert.match(setCookie, /refresh_token=/, 'cookie refresh harus diganti');
+  assert.doesNotMatch(setCookie, /token-kasir-lama/,
+    'cookie kasir lama harus tergantikan, kalau tidak /refresh akan memulihkan identitas kasir sebelumnya');
+  await app.close();
+});
+
+test('pin-login menghapus sesi kasir sebelumnya di perangkat yang sama', async () => {
+  const pin_hash = await bcrypt.hash('1234', 4);
+  const db = fakeDb({
+    users: [{ ...STAFF, pin_hash }],
+    tenants: [{ id: TENANT, plan_code: 'resto_pro' }],
+    sessions: [],
+  });
+  const app = await buildTestApp({ db, redis: fakeRedisForApp(), routes: [[pinLoginRoutes, '/api/v1/auth']] });
+  await app.inject({
+    method: 'POST', url: '/api/v1/auth/pin-login',
+    headers: { cookie: 'refresh_token=token-kasir-lama' },
+    payload: { tenant_id: TENANT, user_id: STAFF.id, pin: '1234' },
+  });
+  const deleted = db._writes.find((w: any) => w.op === 'delete' && w.table === 'sessions');
+  assert.ok(deleted, 'sesi kasir lama di perangkat ini harus dicabut, bukan dibiarkan hidup 30 hari');
+  await app.close();
+});
