@@ -5,6 +5,15 @@ import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
 import { createDb } from '@ipos-cloud/shared';
+import { buildErrorHandler } from './error-handler.js';
+import { loginRoute } from './routes/login.js';
+import { refreshRoute } from './routes/refresh.js';
+import { logoutRoute } from './routes/logout.js';
+import { otpRoutes } from './routes/otp.js';
+import { impersonateRoute } from './routes/impersonate.js';
+import { forgotPasswordRoute } from './routes/forgot-password.js';
+import { resetPasswordRoute } from './routes/reset-password.js';
+import { pinLoginRoutes } from './routes/pin-login.js';
 
 // trustProxy: service ini SELALU di belakang nginx (lihat nginx/nginx.conf:16-18 yang
 // mengirim X-Forwarded-For). Tanpa ini request.ip = IP container nginx untuk semua
@@ -32,15 +41,6 @@ app.decorate('db', db);
 app.get('/health', async () => ({ status: 'ok', service: 'auth-service', version: '0.1.0' }));
 
 // Routes
-import { loginRoute } from './routes/login.js';
-import { refreshRoute } from './routes/refresh.js';
-import { logoutRoute } from './routes/logout.js';
-import { otpRoutes } from './routes/otp.js';
-import { impersonateRoute } from './routes/impersonate.js';
-import { forgotPasswordRoute } from './routes/forgot-password.js';
-import { resetPasswordRoute } from './routes/reset-password.js';
-import { pinLoginRoutes } from './routes/pin-login.js';
-
 app.register(loginRoute, { prefix: '/api/v1/auth' });
 app.register(pinLoginRoutes, { prefix: '/api/v1/auth' });
 app.register(refreshRoute, { prefix: '/api/v1/auth' });
@@ -50,10 +50,7 @@ app.register(impersonateRoute, { prefix: '/api/v1/admin' });
 app.register(forgotPasswordRoute, { prefix: '/api/v1/auth' });
 app.register(resetPasswordRoute, { prefix: '/api/v1/auth' });
 
-app.setErrorHandler((error: Error & { statusCode?: number; code?: string }, _request, reply) => {
-  app.log.error(error);
-  reply.code(error.statusCode ?? 500).send({ error: error.message, code: error.code || 'INTERNAL_ERROR' });
-});
+app.setErrorHandler(buildErrorHandler(app.log));
 
 const port = parseInt(process.env.PORT || '3001');
 app.listen({ port, host: '0.0.0.0' }, (err) => {
