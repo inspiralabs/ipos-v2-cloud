@@ -59,7 +59,7 @@ app.register(loginRoute, { prefix: '/api/v1/auth' });
 app.register(pinLoginRoutes, { prefix: '/api/v1/auth' });
 app.register(refreshRoute, { prefix: '/api/v1/auth' });
 app.register(logoutRoute, { prefix: '/api/v1/auth' });
-app.register(impersonateRoute, { prefix: '/api/v1/admin' });
+app.register(impersonateRoute, { prefix: '/api/v1/auth/admin' });
 app.register(forgotPasswordRoute, { prefix: '/api/v1/auth' });
 app.register(resetPasswordRoute, { prefix: '/api/v1/auth' });
 
