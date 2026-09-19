@@ -8,13 +8,30 @@ import { users, tenants } from '@ipos-cloud/drizzle-schema';
 // sudah tahu tenant_id dari sesi sebelumnya (subdomain/localStorage), bukan login awal.
 export async function pinLoginRoutes(app: FastifyInstance) {
   // Daftar nama staff yang punya PIN aktif, buat picker "pilih nama" — tanpa password/email.
-  app.get('/pin-login/staff', async (request, reply) => {
-    const { tenant_id } = z.object({ tenant_id: z.string().uuid() }).parse(request.query);
+  // WAJIB token: sebelumnya endpoint ini publik dan tenant_id diambil dari query string,
+  // sehingga siapa pun yang punya tenant_id (bocor dari endpoint QR publik) bisa memanen
+  // seluruh daftar staf + user_id-nya. tenant_id sekarang HANYA dari klaim token.
+  app.get('/pin-login/staff', {
+    preHandler: async (request, reply) => {
+      try {
+        await request.jwtVerify();
+      } catch {
+        return reply.code(401).send({ error: 'Unauthorized', code: 'UNAUTHORIZED' });
+      }
+    },
+  }, async (request, reply) => {
+    const { tenant_id } = request.user as { tenant_id: string | null };
+    if (!tenant_id) {
+      return reply.code(403).send({ error: 'Akun ini tidak terikat ke tenant', code: 'NOT_A_TENANT_USER' });
+    }
     const db = (app as any).db;
     const rows = await db.select({ id: users.id, name: users.name, role: users.role })
       .from(users)
       .where(and(eq(users.tenant_id, tenant_id), isNotNull(users.pin_hash), eq(users.is_active, true)));
-    return { data: rows };
+    // Whitelist eksplisit di sini (bukan cuma mengandalkan proyeksi kolom di select()
+    // di atas) — belt-and-suspenders supaya pin_hash/email tidak pernah lolos ke respons
+    // meski select() di atas suatu saat berubah jadi select semua kolom.
+    return { data: rows.map((r: { id: string; name: string; role: string }) => ({ id: r.id, name: r.name, role: r.role })) };
   });
 
   app.post('/pin-login', async (request: any, reply) => {

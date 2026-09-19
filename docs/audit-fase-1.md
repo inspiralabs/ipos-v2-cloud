@@ -598,3 +598,10 @@ di atas bukan formalitas; itu adalah pertama kalinya SQL ini akan benar-benar me
 8. **Migrasi 0003 memindahkan data sebelum `DROP COLUMN`** — contoh migrasi data yang benar.
 9. **Tidak ada SQL injection** di report-service; **isolasi tenant di websocket-gateway aman**.
 10. Komentar menjelaskan *kenapa*, bukan *apa*. Pertahankan saat refactor.
+
+## Perubahan kontrak API dari Fase 3
+
+- `GET /api/v1/auth/pin-login/staff` — sekarang butuh `Authorization: Bearer <jwt>`
+  dan TIDAK lagi menerima `?tenant_id=`. Frontend: `apps/tenant-app/app/pin-login/page.tsx:45`
+  harus mengirim token dari `getToken()` dan berhenti membaca `tenant_id` dari query.
+  Dikerjakan di Modul 6.
