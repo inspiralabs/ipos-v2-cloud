@@ -605,3 +605,15 @@ di atas bukan formalitas; itu adalah pertama kalinya SQL ini akan benar-benar me
   dan TIDAK lagi menerima `?tenant_id=`. Frontend: `apps/tenant-app/app/pin-login/page.tsx:45`
   harus mengirim token dari `getToken()` dan berhenti membaca `tenant_id` dari query.
   Dikerjakan di Modul 6.
+
+- `POST /api/v1/auth/login` dan `POST /api/v1/auth/refresh` sekarang bisa membalas `403`
+  dengan `code: TENANT_SUSPENDED` / `TENANT_EXPIRED` / `TENANT_DELETED` kalau tenant
+  pengguna berstatus tidak aktif. Frontend belum menangani status ini secara khusus
+  (lihat `apps/tenant-app/lib/trial.ts:12`, yang cuma membedakan `trial` vs `PRODUCTION`
+  dan tidak punya state untuk suspended/expired) — butuh layar tersendiri. Dikerjakan di
+  Modul 6.
+
+- Route impersonate (`POST .../impersonate`) pindah dari `/api/v1/admin/tenants/:id/impersonate`
+  ke `/api/v1/auth/admin/tenants/:id/impersonate` (memperbaiki routing nginx yang sebelumnya
+  membuatnya 404 di produksi). Tidak ada klien yang memanggilnya hari ini — dicatat supaya
+  siapa pun yang mewire admin-app ke fitur ini nanti memakai URL yang benar.
