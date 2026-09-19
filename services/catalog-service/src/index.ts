@@ -11,7 +11,7 @@ import {
   variant_groups, variant_options, menu_variant_groups,
 } from '@ipos-cloud/drizzle-schema';
 
-const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info' } });
+const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info' }, trustProxy: true });
 app.register(cors, { origin: process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()) || true, credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] });
 app.register(jwt, {
   secret: { public: process.env.JWT_PUBLIC_KEY!.replace(/\\n/g, '\n') },

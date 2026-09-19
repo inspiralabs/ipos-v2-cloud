@@ -11,7 +11,12 @@ const loginBody = z.object({
 });
 
 export async function loginRoute(app: FastifyInstance) {
-  app.post('/login', async (request, reply) => {
+  app.post('/login', {
+    // Lebih ketat dari limit global 100/menit: /login adalah target brute force password.
+    // Sengaja lebih longgar dari forgot-password (5/15m) supaya kasir yang salah ketik
+    // beberapa kali tidak langsung terkunci.
+    config: { rateLimit: { max: 10, timeWindow: '5 minutes' } },
+  }, async (request, reply) => {
     const body = loginBody.parse(request.body);
     const db = (app as any).db;
 

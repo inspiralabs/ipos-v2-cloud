@@ -5,7 +5,7 @@ import jwt from '@fastify/jwt';
 import multipart from '@fastify/multipart';
 import { createDb, createR2Client } from '@ipos-cloud/shared';
 
-const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info' } });
+const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info' }, trustProxy: true });
 
 app.register(cors, { origin: process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()) || true, credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] });
 app.register(jwt, {

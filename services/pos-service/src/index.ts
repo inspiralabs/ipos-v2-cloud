@@ -8,7 +8,7 @@ import { and, eq, between, inArray } from 'drizzle-orm';
 import { createDb, requireFeature, hasFeature, type TenantPlan } from '@ipos-cloud/shared';
 import { pos_shifts, pos_orders, pos_order_items, tenants } from '@ipos-cloud/drizzle-schema';
 
-const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info' } });
+const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info' }, trustProxy: true });
 app.register(cors, { origin: process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()) || true, credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] });
 app.register(jwt, {
   secret: { public: process.env.JWT_PUBLIC_KEY!.replace(/\\n/g, '\n') },

@@ -6,7 +6,11 @@ import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
 import { createDb } from '@ipos-cloud/shared';
 
-const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info' } });
+// trustProxy: service ini SELALU di belakang nginx (lihat nginx/nginx.conf:16-18 yang
+// mengirim X-Forwarded-For). Tanpa ini request.ip = IP container nginx untuk semua
+// klien, sehingga rate limit jadi satu ember global: penyerang tidak terhenti dan
+// pengguna sah ikut terkunci. Juga membuat sessions.ip_address berguna.
+const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info' }, trustProxy: true });
 
 app.register(cors, { origin: process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()) || true, credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] });
 app.register(cookie);
