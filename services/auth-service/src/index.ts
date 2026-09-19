@@ -4,7 +4,7 @@ import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
-import { createDb } from '@ipos-cloud/shared';
+import { createDb, createRedis } from '@ipos-cloud/shared';
 import { buildErrorHandler } from './error-handler.js';
 import { loginRoute } from './routes/login.js';
 import { refreshRoute } from './routes/refresh.js';
@@ -37,6 +37,13 @@ const db = createDb(process.env.DATABASE_URL!);
 
 // Attach db to request for routes
 app.decorate('db', db);
+
+// REDIS_URL sudah diberikan ke service ini di docker-compose.yml:25 tapi sebelumnya
+// tidak dipakai. Sekarang jadi tempat penghitung percobaan PIN (lihat pin-attempts.ts).
+const redis = createRedis(process.env.REDIS_URL || 'redis://localhost:6379', (err) =>
+  app.log.error({ err: err.message }, 'redis error')
+);
+app.decorate('redis', redis);
 
 app.get('/health', async () => ({ status: 'ok', service: 'auth-service', version: '0.1.0' }));
 

@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import bcrypt from 'bcryptjs';
 import { buildTestApp, fakeDb } from '../test-support.js';
 import { pinLoginRoutes } from './pin-login.js';
+import { MAX_PIN_ATTEMPTS } from '../pin-attempts.js';
 
 const TENANT = '22222222-2222-2222-2222-222222222222';
 const STAFF = {
@@ -61,5 +63,42 @@ test('respons daftar staf tidak memuat pin_hash atau email', async () => {
   const row = res.json().data[0];
   assert.equal(row.pin_hash, undefined);
   assert.equal(row.email, undefined);
+  await app.close();
+});
+
+function fakeRedisForApp() {
+  const store = new Map<string, number>();
+  return {
+    async incr(k: string) { const v = (store.get(k) ?? 0) + 1; store.set(k, v); return v; },
+    async expire() { return 1; },
+    async get(k: string) { const v = store.get(k); return v === undefined ? null : String(v); },
+    async del(k: string) { store.delete(k); return 1; },
+  };
+}
+
+test('PIN salah berulang mengunci akun', async () => {
+  const pin_hash = await bcrypt.hash('1234', 4);
+  const db = fakeDb({
+    users: [{ ...STAFF, pin_hash }],
+    tenants: [{ id: TENANT, plan_code: 'resto_pro' }],
+    sessions: [],
+  });
+  const app = await buildTestApp({ db, redis: fakeRedisForApp(), routes: [[pinLoginRoutes, '/api/v1/auth']] });
+  const body = { tenant_id: TENANT, user_id: STAFF.id, pin: '9999' };
+
+  for (let i = 0; i < MAX_PIN_ATTEMPTS; i++) {
+    const res = await app.inject({ method: 'POST', url: '/api/v1/auth/pin-login', payload: body });
+    assert.equal(res.statusCode, 401, `percobaan ke-${i + 1} harus 401`);
+  }
+  const locked = await app.inject({ method: 'POST', url: '/api/v1/auth/pin-login', payload: body });
+  assert.equal(locked.statusCode, 429);
+  assert.equal(locked.json().code, 'PIN_LOCKED');
+
+  // PIN yang BENAR pun harus ditolak selama terkunci.
+  const correct = await app.inject({
+    method: 'POST', url: '/api/v1/auth/pin-login',
+    payload: { ...body, pin: '1234' },
+  });
+  assert.equal(correct.statusCode, 429, 'lockout harus berlaku walau PIN-nya benar');
   await app.close();
 });
