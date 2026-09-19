@@ -11,7 +11,7 @@ app.register(cors, { origin: process.env.CORS_ORIGIN?.split(',').map((s) => s.tr
 app.register(jwt, {
   secret: { public: process.env.JWT_PUBLIC_KEY!.replace(/\\n/g, '\n') },
 });
-app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } });
+app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB, selaras dengan client_max_body_size 10m di nginx untuk route /api/v1/tenants
 
 const db = createDb(process.env.DATABASE_URL!);
 app.decorate('db', db);

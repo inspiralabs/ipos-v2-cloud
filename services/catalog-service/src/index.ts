@@ -16,7 +16,7 @@ app.register(cors, { origin: process.env.CORS_ORIGIN?.split(',').map((s) => s.tr
 app.register(jwt, {
   secret: { public: process.env.JWT_PUBLIC_KEY!.replace(/\\n/g, '\n') },
 });
-app.register(multipart, { limits: { fileSize: 2 * 1024 * 1024 } }); // 2MB, sama batasnya dengan LogoUploader di frontend
+app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB, selaras dengan client_max_body_size 10m di nginx untuk route /api/v1/catalog
 
 const r2 = createR2Client();
 
