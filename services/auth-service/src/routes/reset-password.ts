@@ -1,13 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { eq, and, gt, isNull } from 'drizzle-orm';
 import { users, password_reset_tokens, sessions } from '@ipos-cloud/drizzle-schema';
-
-function hashToken(token: string) {
-  return crypto.createHash('sha256').update(token).digest('hex');
-}
+import { hashToken } from '../token.js';
 
 export async function resetPasswordRoute(app: FastifyInstance) {
   app.post('/reset-password', {

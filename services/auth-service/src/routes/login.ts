@@ -2,7 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
-import { users, sessions, tenants } from '@ipos-cloud/drizzle-schema';
+import { users, sessions } from '@ipos-cloud/drizzle-schema';
+import { resolveTenantAccess, buildJwtPayload, TENANT_BLOCKED_MESSAGE, ACCESS_TOKEN_TTL_SECONDS } from '../token.js';
 
 const loginBody = z.object({
   email: z.string().email(),
@@ -34,19 +35,15 @@ export async function loginRoute(app: FastifyInstance) {
       return reply.code(403).send({ error: 'Hanya admin yang bisa login di sini', code: 'ADMIN_ONLY' });
     }
 
-    let plan: string | null = null;
-    if (user.tenant_id) {
-      const [tenant] = await db.select({ plan_code: tenants.plan_code }).from(tenants).where(eq(tenants.id, user.tenant_id)).limit(1);
-      plan = tenant?.plan_code ?? null;
+    const access = await resolveTenantAccess(db, user.tenant_id ?? null);
+    if (!access.ok) {
+      return reply.code(403).send({
+        error: TENANT_BLOCKED_MESSAGE[access.reason],
+        code: `TENANT_${access.reason}`,
+      });
     }
 
-    const payload = {
-      sub: user.id,
-      tenant_id: user.tenant_id ?? null,
-      role: user.role,
-      plan,
-      outlet_id: user.outlet_id ?? null,
-    };
+    const payload = buildJwtPayload(user, access.plan);
 
     const access_token = app.jwt.sign(payload);
 
@@ -69,6 +66,6 @@ export async function loginRoute(app: FastifyInstance) {
       expires: expires_at,
     });
 
-    return { access_token, expires_in: 900, user: { id: user.id, name: user.name, role: user.role } };
+    return { access_token, expires_in: ACCESS_TOKEN_TTL_SECONDS, user: { id: user.id, name: user.name, role: user.role } };
   });
 }

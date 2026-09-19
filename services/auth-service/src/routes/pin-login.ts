@@ -2,8 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { eq, and, isNotNull } from 'drizzle-orm';
-import { users, tenants, sessions } from '@ipos-cloud/drizzle-schema';
+import { users, sessions } from '@ipos-cloud/drizzle-schema';
 import { MAX_PIN_ATTEMPTS, isPinLocked, registerFailedPin, clearPinAttempts } from '../pin-attempts.js';
+import { resolveTenantAccess, buildJwtPayload, TENANT_BLOCKED_MESSAGE, ACCESS_TOKEN_TTL_SECONDS } from '../token.js';
 
 // PIN login cepat — ganti kasir/staf tanpa logout penuh (§21). Dipanggil dari tenant-app yang
 // sudah tahu tenant_id dari sesi sebelumnya (subdomain/localStorage), bukan login awal.
@@ -67,13 +68,18 @@ export async function pinLoginRoutes(app: FastifyInstance) {
 
     await clearPinAttempts(redis, body.user_id);
 
-    const [tenant] = await db.select({ plan_code: tenants.plan_code }).from(tenants)
-      .where(eq(tenants.id, body.tenant_id)).limit(1);
+    const access = await resolveTenantAccess(db, body.tenant_id);
+    if (!access.ok) {
+      return reply.code(403).send({
+        error: TENANT_BLOCKED_MESSAGE[access.reason],
+        code: `TENANT_${access.reason}`,
+      });
+    }
 
-    const token = app.jwt.sign({
-      sub: user.id, tenant_id: body.tenant_id, role: user.role,
-      plan: tenant?.plan_code ?? null, outlet_id: user.outlet_id ?? null,
-    });
+    const token = app.jwt.sign(buildJwtPayload(
+      { id: user.id, role: user.role, tenant_id: body.tenant_id, outlet_id: user.outlet_id ?? null },
+      access.plan
+    ));
 
     // Ganti kasir HARUS mengganti sesi, bukan cuma menerbitkan access token baru.
     // Sebelumnya cookie refresh_token kasir lama dibiarkan utuh, jadi setelah 15 menit
@@ -102,6 +108,6 @@ export async function pinLoginRoutes(app: FastifyInstance) {
       expires: expires_at,
     });
 
-    return { access_token: token, expires_in: 900, user: { id: user.id, name: user.name, role: user.role } };
+    return { access_token: token, expires_in: ACCESS_TOKEN_TTL_SECONDS, user: { id: user.id, name: user.name, role: user.role } };
   });
 }

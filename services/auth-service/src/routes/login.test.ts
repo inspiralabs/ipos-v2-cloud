@@ -77,3 +77,24 @@ test('/login punya rate limit sendiri, tidak hanya limit global 100/menit', asyn
   assert.ok(codes.includes(429), `brute force password harus kena 429; dapat ${[...new Set(codes)].join(',')}`);
   await app.close();
 });
+
+test('login DITOLAK kalau tenant sedang suspended', async () => {
+  const user = {
+    id: '11111111-1111-1111-1111-111111111111',
+    tenant_id: '77777777-7777-7777-7777-777777777777',
+    outlet_id: null, name: 'Owner', email: 'owner@toko.id',
+    password_hash: await bcrypt.hash(PASSWORD, 4), role: 'owner', is_active: true,
+  };
+  const db = fakeDb({
+    users: [user], sessions: [],
+    tenants: [{ id: user.tenant_id, plan_code: 'resto_pro', status: 'suspended', deleted_at: null }],
+  });
+  const app = await buildTestApp({ db, routes: [[loginRoute, '/api/v1/auth']] });
+  const res = await app.inject({
+    method: 'POST', url: '/api/v1/auth/login',
+    payload: { email: 'owner@toko.id', password: PASSWORD },
+  });
+  assert.equal(res.statusCode, 403, 'tenant suspended tidak boleh bisa login dan bertransaksi');
+  assert.equal(res.json().code, 'TENANT_SUSPENDED');
+  await app.close();
+});

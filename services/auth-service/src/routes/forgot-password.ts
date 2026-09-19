@@ -3,10 +3,7 @@ import { z } from 'zod';
 import crypto from 'node:crypto';
 import { eq, and, isNull } from 'drizzle-orm';
 import { users, password_reset_tokens } from '@ipos-cloud/drizzle-schema';
-
-function hashToken(token: string) {
-  return crypto.createHash('sha256').update(token).digest('hex');
-}
+import { hashToken } from '../token.js';
 
 // Fire-and-forget — sama seperti notifyTenantInvitation di tenant-service/src/routes/admin/tenants.ts.
 async function sendResetEmail(log: { warn: (o: unknown, m: string) => void }, vars: { name: string; email: string; reset_url: string }) {

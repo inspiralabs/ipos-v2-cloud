@@ -14,6 +14,7 @@ import { impersonateRoute } from './routes/impersonate.js';
 import { forgotPasswordRoute } from './routes/forgot-password.js';
 import { resetPasswordRoute } from './routes/reset-password.js';
 import { pinLoginRoutes } from './routes/pin-login.js';
+import { ACCESS_TOKEN_TTL } from './token.js';
 
 // trustProxy: service ini SELALU di belakang nginx (lihat nginx/nginx.conf:16-18 yang
 // mengirim X-Forwarded-For). Tanpa ini request.ip = IP container nginx untuk semua
@@ -30,7 +31,7 @@ app.register(jwt, {
     private: process.env.JWT_PRIVATE_KEY!.replace(/\\n/g, '\n'),
     public: process.env.JWT_PUBLIC_KEY!.replace(/\\n/g, '\n'),
   },
-  sign: { algorithm: 'RS256', expiresIn: '15m' },
+  sign: { algorithm: 'RS256', expiresIn: ACCESS_TOKEN_TTL },
 });
 
 const db = createDb(process.env.DATABASE_URL!);
