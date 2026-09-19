@@ -5,6 +5,7 @@ import { eq, and, isNotNull } from 'drizzle-orm';
 import { users, sessions } from '@ipos-cloud/drizzle-schema';
 import { MAX_PIN_ATTEMPTS, isPinLocked, registerFailedPin, clearPinAttempts } from '../pin-attempts.js';
 import { resolveTenantAccess, buildJwtPayload, TENANT_BLOCKED_MESSAGE, ACCESS_TOKEN_TTL_SECONDS } from '../token.js';
+import { REFRESH_COOKIE_OPTIONS } from '../env.js';
 
 // PIN login cepat — ganti kasir/staf tanpa logout penuh (§21). Dipanggil dari tenant-app yang
 // sudah tahu tenant_id dari sesi sebelumnya (subdomain/localStorage), bukan login awal.
@@ -100,13 +101,7 @@ export async function pinLoginRoutes(app: FastifyInstance) {
       user_agent: request.headers['user-agent'],
     });
 
-    reply.setCookie('refresh_token', refresh_token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      path: '/',
-      expires: expires_at,
-    });
+    reply.setCookie('refresh_token', refresh_token, { ...REFRESH_COOKIE_OPTIONS, expires: expires_at });
 
     return { access_token: token, expires_in: ACCESS_TOKEN_TTL_SECONDS, user: { id: user.id, name: user.name, role: user.role } };
   });

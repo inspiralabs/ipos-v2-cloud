@@ -15,6 +15,9 @@ import { forgotPasswordRoute } from './routes/forgot-password.js';
 import { resetPasswordRoute } from './routes/reset-password.js';
 import { pinLoginRoutes } from './routes/pin-login.js';
 import { ACCESS_TOKEN_TTL } from './token.js';
+import { requireEnv, resolveCorsOrigin } from './env.js';
+
+requireEnv(['DATABASE_URL', 'JWT_PRIVATE_KEY', 'JWT_PUBLIC_KEY']);
 
 // trustProxy: service ini SELALU di belakang nginx (lihat nginx/nginx.conf:16-18 yang
 // mengirim X-Forwarded-For). Tanpa ini request.ip = IP container nginx untuk semua
@@ -22,7 +25,11 @@ import { ACCESS_TOKEN_TTL } from './token.js';
 // pengguna sah ikut terkunci. Juga membuat sessions.ip_address berguna.
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info' }, trustProxy: true });
 
-app.register(cors, { origin: process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()) || true, credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] });
+app.register(cors, {
+  origin: resolveCorsOrigin(process.env.CORS_ORIGIN, process.env.NODE_ENV),
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+});
 app.register(cookie);
 // Default global: cukup longgar. Endpoint forgot/reset-password punya limit lebih ketat sendiri (lihat route masing-masing).
 app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
