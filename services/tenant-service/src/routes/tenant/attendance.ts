@@ -34,6 +34,14 @@ export async function tenantAttendanceRoutes(app: FastifyInstance) {
   app.post('/clock-in', { preHandler: requireFeature(db, 'absensi') }, async (request: any, reply) => {
     const { user_id } = clockBody.parse(request.body);
     const { tenant_id } = request.user as { tenant_id: string };
+
+    // user_id datang dari body, dipilih staff sendiri di kiosk — bukan pemilik JWT. Tanpa
+    // verifikasi ini, siapa pun yang pegang kiosk bisa clock-in/out atas nama user_id
+    // sembarang (termasuk milik tenant lain), mencemari data absensi tenant ini.
+    const [staff] = await db.select({ id: users.id }).from(users)
+      .where(and(eq(users.id, user_id), eq(users.tenant_id, tenant_id)));
+    if (!staff) return reply.code(404).send({ error: 'Staff tidak ditemukan', code: 'NOT_FOUND' });
+
     const today = new Date().toISOString().slice(0, 10);
     const now = new Date();
 
@@ -57,6 +65,11 @@ export async function tenantAttendanceRoutes(app: FastifyInstance) {
   app.post('/clock-out', { preHandler: requireFeature(db, 'absensi') }, async (request: any, reply) => {
     const { user_id } = clockBody.parse(request.body);
     const { tenant_id } = request.user as { tenant_id: string };
+
+    const [staff] = await db.select({ id: users.id }).from(users)
+      .where(and(eq(users.id, user_id), eq(users.tenant_id, tenant_id)));
+    if (!staff) return reply.code(404).send({ error: 'Staff tidak ditemukan', code: 'NOT_FOUND' });
+
     const today = new Date().toISOString().slice(0, 10);
 
     const [row] = await db.update(attendance_logs)
