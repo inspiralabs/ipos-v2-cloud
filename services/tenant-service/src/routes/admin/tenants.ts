@@ -76,26 +76,24 @@ export async function tenantsAdminRoutes(app: FastifyInstance) {
     const db = (app as any).db;
     const slug = slugify(body.name);
     const trial_ends_at = body.mode === 'trial' ? new Date(Date.now() + body.trial_days * 86400000) : null;
-
-    const [tenant] = await db.insert(tenants).values({
-      name: body.name,
-      slug,
-      plan_code: body.plan_code,
-      status: body.mode,
-      trial_ends_at,
-      notes: body.notes,
-    }).returning();
-
-    // Create owner user
     const tempPassword = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
     const password_hash = await bcrypt.hash(tempPassword, 10);
-    await db.insert(users).values({
-      tenant_id: tenant.id,
-      name: body.name,
-      email: body.email,
-      phone: body.phone,
-      password_hash,
-      role: 'owner',
+
+    // Tenant + owner user dibuat dalam SATU transaksi: sebelumnya kalau insert user
+    // gagal (mis. email dobel), tenant sudah kadung ter-insert TANPA owner — yatim
+    // permanen. owner_id juga di-set di sini — sebelumnya TIDAK PERNAH diisi sama
+    // sekali, jadi email admin selalu null & reset-owner-password selalu 404.
+    const tenant = await db.transaction(async (tx: any) => {
+      const [created] = await tx.insert(tenants).values({
+        name: body.name, slug, plan_code: body.plan_code, status: body.mode, trial_ends_at, notes: body.notes,
+      }).returning();
+
+      const [owner] = await tx.insert(users).values({
+        tenant_id: created.id, name: body.name, email: body.email, phone: body.phone, password_hash, role: 'owner',
+      }).returning({ id: users.id });
+
+      const [withOwner] = await tx.update(tenants).set({ owner_id: owner.id }).where(eq(tenants.id, created.id)).returning();
+      return withOwner;
     });
 
     await logAdminAction(db, {
