@@ -7,3 +7,4 @@ export * from './realtime.js';
 export * from './r2.js';
 export * from './tenant-access.js';
 export * from './error-handler.js';
+export * from './soft-delete.js';

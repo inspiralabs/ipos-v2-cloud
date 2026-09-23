@@ -1,9 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { eq, desc, ilike, and, isNull, isNotNull, inArray, sql } from 'drizzle-orm';
+import { eq, desc, ilike, and, isNull, inArray, sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { tenants, users } from '@ipos-cloud/drizzle-schema';
-import { logAdminAction } from '@ipos-cloud/shared';
+import { logAdminAction, softDeleteOne, restoreOne, softDeleteBulk } from '@ipos-cloud/shared';
 import { adminGuard, superAdminGuard } from '../../middleware/admin-guard.js';
 import { parsePagination } from '../../lib/pagination.js';
 
@@ -229,10 +229,7 @@ export async function tenantsAdminRoutes(app: FastifyInstance) {
   app.post('/bulk-delete', { preHandler: adminGuard }, async (request: any) => {
     const { ids } = z.object({ ids: z.array(z.string().uuid()).min(1) }).parse(request.body);
     const db = (app as any).db;
-    const rows = await db.update(tenants).set({ deleted_at: new Date() })
-      .where(and(inArray(tenants.id, ids), isNull(tenants.deleted_at))).returning({ id: tenants.id, name: tenants.name });
-
-    await logAdminAction(db, { adminId: (request.user as any).sub, action: 'tenant.bulk_deleted', targetType: 'tenant', targetName: rows.map((r: any) => r.name).join(', '), after: { ids: rows.map((r: any) => r.id) }, ipAddress: request.ip });
+    const rows = await softDeleteBulk({ db, table: tenants, nameColumn: tenants.name, ids, targetType: 'tenant', adminId: (request.user as any).sub, ipAddress: request.ip });
     return { ok: true, count: rows.length };
   });
 
@@ -254,21 +251,15 @@ export async function tenantsAdminRoutes(app: FastifyInstance) {
   // Beda dari Terminate: ini murni visibilitas di admin panel, tidak mengubah status bisnis tenant.
   app.delete('/:id/soft', { preHandler: adminGuard }, async (request: any, reply) => {
     const db = (app as any).db;
-    const [deleted] = await db.update(tenants).set({ deleted_at: new Date() })
-      .where(and(eq(tenants.id, request.params.id), isNull(tenants.deleted_at))).returning();
+    const deleted = await softDeleteOne({ db, table: tenants, nameColumn: tenants.name, id: request.params.id, targetType: 'tenant', adminId: (request.user as any).sub, ipAddress: request.ip });
     if (!deleted) return reply.code(404).send({ error: 'Tenant not found', code: 'NOT_FOUND' });
-
-    await logAdminAction(db, { adminId: (request.user as any).sub, action: 'tenant.deleted', targetType: 'tenant', targetId: request.params.id, targetName: deleted.name, ipAddress: request.ip });
     return { ok: true };
   });
 
   app.post('/:id/restore', { preHandler: adminGuard }, async (request: any, reply) => {
     const db = (app as any).db;
-    const [restored] = await db.update(tenants).set({ deleted_at: null })
-      .where(and(eq(tenants.id, request.params.id), isNotNull(tenants.deleted_at))).returning();
+    const restored = await restoreOne({ db, table: tenants, nameColumn: tenants.name, id: request.params.id, targetType: 'tenant', adminId: (request.user as any).sub, ipAddress: request.ip });
     if (!restored) return reply.code(404).send({ error: 'Tenant not found or not deleted', code: 'NOT_FOUND' });
-
-    await logAdminAction(db, { adminId: (request.user as any).sub, action: 'tenant.restored', targetType: 'tenant', targetId: request.params.id, targetName: restored.name, ipAddress: request.ip });
     return { ok: true };
   });
 

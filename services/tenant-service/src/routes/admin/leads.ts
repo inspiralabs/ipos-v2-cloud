@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { eq, desc, and, isNull, isNotNull, inArray, sql } from 'drizzle-orm';
+import { eq, desc, and, isNull, inArray, sql } from 'drizzle-orm';
 import { leads, lead_notes } from '@ipos-cloud/drizzle-schema';
-import { logAdminAction } from '@ipos-cloud/shared';
+import { logAdminAction, softDeleteOne, restoreOne, softDeleteBulk } from '@ipos-cloud/shared';
 import { adminGuard, superAdminGuard } from '../../middleware/admin-guard.js';
 import { parsePagination } from '../../lib/pagination.js';
 
@@ -47,10 +47,7 @@ export async function leadsAdminRoutes(app: FastifyInstance) {
   app.post('/bulk-delete', { preHandler: adminGuard }, async (request: any) => {
     const { ids } = z.object({ ids: z.array(z.string().uuid()).min(1) }).parse(request.body);
     const db = (app as any).db;
-    const rows = await db.update(leads).set({ deleted_at: new Date() })
-      .where(and(inArray(leads.id, ids), isNull(leads.deleted_at))).returning({ id: leads.id, name: leads.name });
-
-    await logAdminAction(db, { adminId: (request.user as any).sub, action: 'lead.bulk_deleted', targetType: 'lead', targetName: rows.map((r: any) => r.name).join(', '), after: { ids: rows.map((r: any) => r.id) }, ipAddress: request.ip });
+    const rows = await softDeleteBulk({ db, table: leads, nameColumn: leads.name, ids, targetType: 'lead', adminId: (request.user as any).sub, ipAddress: request.ip });
     return { ok: true, count: rows.length };
   });
 
@@ -67,21 +64,15 @@ export async function leadsAdminRoutes(app: FastifyInstance) {
   // Hapus sementara — hilang dari daftar default, masih ada di DB, bisa dipulihkan.
   app.delete('/:id', { preHandler: adminGuard }, async (request: any, reply) => {
     const db = (app as any).db;
-    const [deleted] = await db.update(leads).set({ deleted_at: new Date() })
-      .where(and(eq(leads.id, request.params.id), isNull(leads.deleted_at))).returning();
+    const deleted = await softDeleteOne({ db, table: leads, nameColumn: leads.name, id: request.params.id, targetType: 'lead', adminId: (request.user as any).sub, ipAddress: request.ip });
     if (!deleted) return reply.code(404).send({ error: 'Lead not found', code: 'NOT_FOUND' });
-
-    await logAdminAction(db, { adminId: (request.user as any).sub, action: 'lead.deleted', targetType: 'lead', targetId: request.params.id, targetName: deleted.name, ipAddress: request.ip });
     return { ok: true };
   });
 
   app.post('/:id/restore', { preHandler: adminGuard }, async (request: any, reply) => {
     const db = (app as any).db;
-    const [restored] = await db.update(leads).set({ deleted_at: null })
-      .where(and(eq(leads.id, request.params.id), isNotNull(leads.deleted_at))).returning();
+    const restored = await restoreOne({ db, table: leads, nameColumn: leads.name, id: request.params.id, targetType: 'lead', adminId: (request.user as any).sub, ipAddress: request.ip });
     if (!restored) return reply.code(404).send({ error: 'Lead not found or not deleted', code: 'NOT_FOUND' });
-
-    await logAdminAction(db, { adminId: (request.user as any).sub, action: 'lead.restored', targetType: 'lead', targetId: request.params.id, targetName: restored.name, ipAddress: request.ip });
     return { ok: true };
   });
 
