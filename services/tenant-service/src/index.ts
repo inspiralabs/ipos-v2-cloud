@@ -3,7 +3,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import multipart from '@fastify/multipart';
-import { createDb, createR2Client } from '@ipos-cloud/shared';
+import { createDb, createR2Client, buildErrorHandler } from '@ipos-cloud/shared';
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info' }, trustProxy: true });
 
@@ -56,10 +56,7 @@ app.register(tenantTransfersRoutes, { prefix: '/api/v1/tenants/transfers' });
 app.register(tenantAttendanceRoutes, { prefix: '/api/v1/tenants/attendance' });
 app.register(tenantLoyaltyRoutes, { prefix: '/api/v1/tenants/loyalty' });
 
-app.setErrorHandler((error: Error & { statusCode?: number; code?: string }, _request, reply) => {
-  app.log.error(error);
-  reply.code(error.statusCode ?? 500).send({ error: error.message, code: error.code || 'INTERNAL_ERROR' });
-});
+app.setErrorHandler(buildErrorHandler(app.log));
 
 const port = parseInt(process.env.PORT || '3002');
 app.listen({ port, host: '0.0.0.0' }, (err) => {
