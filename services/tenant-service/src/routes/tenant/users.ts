@@ -3,14 +3,16 @@ import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { eq, and, ne, sql } from 'drizzle-orm';
 import { users } from '@ipos-cloud/drizzle-schema';
-import { tenantGuard } from '../../middleware/admin-guard.js';
+import { requireTenantRole } from '../../middleware/admin-guard.js';
 
 const CASHIER_ROLES = ['cashier', 'outlet_manager', 'kitchen_staff', 'waiter', 'manager'] as const;
 
 // Kelola kasir milik toko sendiri — dipakai Setup Wizard step 3 & Pengaturan > Kasir.
 // Beda dari admin/admins.ts: itu kelola staf InspiraLabs, ini kelola staf tenant.
 export async function tenantUsersRoutes(app: FastifyInstance) {
-  app.addHook('preHandler', tenantGuard);
+  // Seluruh router ini cuma boleh diakses owner — mengelola staf lain (lihat siapa,
+  // buat akun baru, ganti PIN, nonaktifkan) bukan wewenang kasir/manager/waiter.
+  app.addHook('preHandler', requireTenantRole('owner'));
 
   app.get('/', async (request: any) => {
     const { tenant_id } = request.user as { tenant_id: string };
@@ -51,8 +53,13 @@ export async function tenantUsersRoutes(app: FastifyInstance) {
     const { tenant_id } = request.user as { tenant_id: string };
     const db = (app as any).db;
     const pin_hash = await bcrypt.hash(pin, 10);
+    // ne(role,'owner') — sebelumnya tidak ada di endpoint ini padahal reset-password &
+    // delete di file yang sama sudah punya proteksi ini. Sekarang router memang sudah
+    // dibatasi ke role owner (preHandler di atas), tapi ini tetap dipertahankan sebagai
+    // pertahanan berlapis: owner tidak boleh mengganti PIN akun owner lain/dirinya lewat
+    // endpoint kelola-staf ini.
     const [updated] = await db.update(users).set({ pin_hash, updated_at: new Date() })
-      .where(and(eq(users.id, request.params.id), eq(users.tenant_id, tenant_id)))
+      .where(and(eq(users.id, request.params.id), eq(users.tenant_id, tenant_id), ne(users.role, 'owner')))
       .returning({ id: users.id });
     if (!updated) return reply.code(404).send({ error: 'Staff tidak ditemukan', code: 'NOT_FOUND' });
     return { ok: true };
