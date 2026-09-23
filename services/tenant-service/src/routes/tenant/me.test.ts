@@ -58,3 +58,10 @@ test('kasir TIDAK BISA upload gambar QRIS', async () => {
   assert.equal(res.statusCode, 403);
   await app.close();
 });
+
+test('kasir TIDAK BISA kirim email test notification', async () => {
+  const { app, asCashier } = await build();
+  const res = await app.inject({ method: 'POST', url: '/api/v1/tenants/me/test-notification', headers: { authorization: `Bearer ${asCashier}` } });
+  assert.equal(res.statusCode, 403, 'ditolak di preHandler, sebelum handler notifikasi dipanggil');
+  await app.close();
+});
