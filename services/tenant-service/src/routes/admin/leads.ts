@@ -4,21 +4,22 @@ import { eq, desc, and, isNull, isNotNull, inArray, sql } from 'drizzle-orm';
 import { leads, lead_notes } from '@ipos-cloud/drizzle-schema';
 import { logAdminAction } from '@ipos-cloud/shared';
 import { adminGuard, superAdminGuard } from '../../middleware/admin-guard.js';
+import { parsePagination } from '../../lib/pagination.js';
 
 export async function leadsAdminRoutes(app: FastifyInstance) {
   app.get('/', { preHandler: adminGuard }, async (request: any) => {
     const db = (app as any).db;
-    const { status, search, includeDeleted, page = '1', limit = '20' } = request.query as Record<string, string>;
+    const { status, search, includeDeleted } = request.query as Record<string, string>;
+    const { page, limit, offset } = parsePagination(request.query as Record<string, string>);
     const conditions = [includeDeleted ? undefined : isNull(leads.deleted_at)];
     if (status) conditions.push(eq(leads.status, status));
     const where = and(...conditions.filter(Boolean));
-    const offset = (parseInt(page) - 1) * parseInt(limit);
 
     const [data, [{ count }]] = await Promise.all([
-      db.select().from(leads).where(where).orderBy(desc(leads.created_at)).limit(parseInt(limit)).offset(offset),
+      db.select().from(leads).where(where).orderBy(desc(leads.created_at)).limit(limit).offset(offset),
       db.select({ count: sql<number>`count(*)::int` }).from(leads).where(where),
     ]);
-    return { data, total: count, page: parseInt(page), limit: parseInt(limit) };
+    return { data, total: count, page, limit };
   });
 
   app.patch('/:id', { preHandler: adminGuard }, async (request: any, reply) => {

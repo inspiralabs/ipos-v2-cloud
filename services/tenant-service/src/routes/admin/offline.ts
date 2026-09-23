@@ -4,6 +4,7 @@ import { eq, desc, and, isNull, isNotNull, inArray, sql } from 'drizzle-orm';
 import { offline_clients, offline_licenses } from '@ipos-cloud/drizzle-schema';
 import { logAdminAction } from '@ipos-cloud/shared';
 import { adminGuard, superAdminGuard } from '../../middleware/admin-guard.js';
+import { parsePagination } from '../../lib/pagination.js';
 
 // HARUS identik dengan ipos-offline/src/lib/license.ts (deriveKey) dan
 // ipos-v1-backend/src/lib/license.ts — device di app kasir memvalidasi
@@ -24,12 +25,12 @@ export async function offlineAdminRoutes(app: FastifyInstance) {
   // List offline clients (+ kode lisensi aktif terbaru kalau ada, buat tampilan admin-app)
   app.get('/clients', { preHandler: adminGuard }, async (request: any) => {
     const db = (app as any).db;
-    const { includeDeleted, page = '1', limit = '20' } = request.query as Record<string, string>;
+    const { includeDeleted } = request.query as Record<string, string>;
+    const { page, limit, offset } = parsePagination(request.query as Record<string, string>);
     const where = includeDeleted ? undefined : isNull(offline_clients.deleted_at);
-    const offset = (parseInt(page) - 1) * parseInt(limit);
 
     const [clients, [{ count }]] = await Promise.all([
-      db.select().from(offline_clients).where(where).orderBy(desc(offline_clients.created_at)).limit(parseInt(limit)).offset(offset),
+      db.select().from(offline_clients).where(where).orderBy(desc(offline_clients.created_at)).limit(limit).offset(offset),
       db.select({ count: sql<number>`count(*)::int` }).from(offline_clients).where(where),
     ]);
     const licenses = await db.select().from(offline_licenses).where(eq(offline_licenses.status, 'active'));
@@ -46,8 +47,8 @@ export async function offlineAdminRoutes(app: FastifyInstance) {
         created_at: c.created_at,
       })),
       total: count,
-      page: parseInt(page),
-      limit: parseInt(limit),
+      page,
+      limit,
     };
   });
 

@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import { tenants, users } from '@ipos-cloud/drizzle-schema';
 import { logAdminAction } from '@ipos-cloud/shared';
 import { adminGuard, superAdminGuard } from '../../middleware/admin-guard.js';
+import { parsePagination } from '../../lib/pagination.js';
 
 function slugify(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -29,9 +30,9 @@ async function notifyTenantInvitation(vars: { name: string; tenant_name: string;
 export async function tenantsAdminRoutes(app: FastifyInstance) {
   // List tenants (+ email pemilik via join ke users, buat tampilan admin-app)
   app.get('/', { preHandler: adminGuard }, async (request: any) => {
-    const { status, search, includeDeleted, page = '1', limit = '20' } = request.query as Record<string, string>;
+    const { status, search, includeDeleted } = request.query as Record<string, string>;
     const db = (app as any).db;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const { page, limit, offset } = parsePagination(request.query as Record<string, string>);
 
     const conditions = [];
     if (!includeDeleted) conditions.push(isNull(tenants.deleted_at));
@@ -53,12 +54,12 @@ export async function tenantsAdminRoutes(app: FastifyInstance) {
         .leftJoin(users, eq(users.id, tenants.owner_id))
         .where(where)
         .orderBy(desc(tenants.created_at))
-        .limit(parseInt(limit))
+        .limit(limit)
         .offset(offset),
       db.select({ count: sql<number>`count(*)::int` }).from(tenants).where(where),
     ]);
 
-    return { data: rows, total: count, page: parseInt(page), limit: parseInt(limit) };
+    return { data: rows, total: count, page, limit };
   });
 
   // Create tenant
