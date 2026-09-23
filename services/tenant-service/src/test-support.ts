@@ -3,6 +3,7 @@ import { generateKeyPairSync } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
 import jwt from '@fastify/jwt';
 import multipart from '@fastify/multipart';
+import { is, SQL } from 'drizzle-orm';
 
 // Keypair ephemeral — test tidak boleh bergantung pada .env atau kunci produksi.
 // tenant-service produksi cuma register public key (cuma perlu VERIFY token dari
@@ -29,6 +30,14 @@ export function fakeDb(tables: Record<string, unknown[]>) {
   const nameOf = (t: any) => String(t?.[Symbol.for('drizzle:Name')] ?? '');
   const project = (row: any, cols?: Record<string, unknown>) =>
     cols ? Object.fromEntries(Object.keys(cols).map((k) => [k, row[k]])) : row;
+  // `.set()` bisa menerima fragmen sql`` (mis. `points_balance: sql\`${col} + ${n}\``) untuk
+  // increment/decrement atomik di Postgres asli. fakeDb tidak pernah mengeksekusi SQL, jadi
+  // tidak bisa menghitung nilai akhirnya — echo balik fragmen mentah itu ke `.returning()`
+  // bikin JSON.stringify meledak (fragmen menyimpan referensi balik ke PgTable/PgColumn,
+  // struktur circular). Buang field yang nilainya masih fragmen SQL supaya tetap serializable;
+  // `_writes` tetap menyimpan fragmen aslinya untuk introspeksi test.
+  const dropUnevaluatedSql = (v: any) =>
+    Object.fromEntries(Object.entries(v ?? {}).filter(([, val]) => !is(val, SQL)));
 
   const db: any = {
     _writes: writes,
@@ -57,10 +66,11 @@ export function fakeDb(tables: Record<string, unknown[]>) {
     update: (t: any) => ({
       set: (v: any) => {
         writes.push({ op: 'update', table: nameOf(t), values: v });
+        const safeRow = dropUnevaluatedSql(v);
         const chain = {
           where: () => chain,
-          returning: (cols?: Record<string, unknown>) => Promise.resolve([project(v, cols)]),
-          then: (r: any, j: any) => Promise.resolve([v]).then(r, j),
+          returning: (cols?: Record<string, unknown>) => Promise.resolve([project(safeRow, cols)]),
+          then: (r: any, j: any) => Promise.resolve([safeRow]).then(r, j),
         };
         return chain;
       },

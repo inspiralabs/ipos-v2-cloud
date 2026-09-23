@@ -52,12 +52,23 @@ export async function tenantLoyaltyRoutes(app: FastifyInstance) {
     const points = Math.floor(body.order_total / 10000);
     if (points <= 0) return reply.code(200).send({ ok: true, points_earned: 0 });
 
-    await db.insert(loyalty_point_logs).values({ tenant_id, member_id: body.member_id, delta: points, reason: 'order_earn', order_id: body.order_id });
-    const [row] = await db.update(loyalty_members)
-      .set({ points_balance: sql`${loyalty_members.points_balance} + ${points}` })
-      .where(and(eq(loyalty_members.id, body.member_id), eq(loyalty_members.tenant_id, tenant_id)))
-      .returning();
-    return reply.code(200).send({ ok: true, points_earned: points, member: row });
+    const member = await db.transaction(async (tx: any) => {
+      // Verifikasi member milik tenant SEBELUM menulis log — sebelumnya log ditulis
+      // dulu, baru UPDATE saldo gagal senyap (WHERE tidak match) kalau member_id
+      // ternyata bukan milik tenant pemanggil.
+      const [m] = await tx.select().from(loyalty_members)
+        .where(and(eq(loyalty_members.id, body.member_id), eq(loyalty_members.tenant_id, tenant_id)));
+      if (!m) return null;
+
+      await tx.insert(loyalty_point_logs).values({ tenant_id, member_id: body.member_id, delta: points, reason: 'order_earn', order_id: body.order_id });
+      const [updated] = await tx.update(loyalty_members)
+        .set({ points_balance: sql`${loyalty_members.points_balance} + ${points}` })
+        .where(and(eq(loyalty_members.id, body.member_id), eq(loyalty_members.tenant_id, tenant_id)))
+        .returning();
+      return updated;
+    });
+    if (!member) return reply.code(404).send({ error: 'Member tidak ditemukan', code: 'NOT_FOUND' });
+    return reply.code(200).send({ ok: true, points_earned: points, member });
   });
 
   const redeemBody = z.object({ member_id: z.string().uuid(), points: z.number().int().positive() });
@@ -69,12 +80,24 @@ export async function tenantLoyaltyRoutes(app: FastifyInstance) {
     if (!member) return reply.code(404).send({ error: 'Member tidak ditemukan', code: 'NOT_FOUND' });
     if (member.points_balance < body.points) return reply.code(400).send({ error: 'Poin tidak cukup', code: 'INSUFFICIENT_POINTS' });
 
-    await db.insert(loyalty_point_logs).values({ tenant_id, member_id: body.member_id, delta: -body.points, reason: 'manual_redeem' });
-    const [row] = await db.update(loyalty_members)
-      .set({ points_balance: sql`${loyalty_members.points_balance} - ${body.points}` })
-      .where(eq(loyalty_members.id, body.member_id))
-      .returning();
-    return row;
+    return db.transaction(async (tx: any) => {
+      // WHERE menyertakan tenant_id (sebelumnya cuma id) DAN guard saldo ulang di level
+      // UPDATE — dua redeem bersamaan bisa lolos cek saldo di atas sebelum salah satu
+      // commit; guard ini mencegah saldo jadi negatif dari race itu.
+      const [row] = await tx.update(loyalty_members)
+        .set({ points_balance: sql`${loyalty_members.points_balance} - ${body.points}` })
+        .where(and(
+          eq(loyalty_members.id, body.member_id),
+          eq(loyalty_members.tenant_id, tenant_id),
+          sql`${loyalty_members.points_balance} >= ${body.points}`,
+        ))
+        .returning();
+      if (!row) {
+        throw Object.assign(new Error('Poin tidak cukup'), { statusCode: 400, code: 'INSUFFICIENT_POINTS' });
+      }
+      await tx.insert(loyalty_point_logs).values({ tenant_id, member_id: body.member_id, delta: -body.points, reason: 'manual_redeem' });
+      return row;
+    });
   });
 
   // Broadcast WA — kirim lewat notification-service internal (best-effort, catat log terlepas hasil kirim).
