@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { tenants, users, tenant_feature_overrides } from '@ipos-cloud/drizzle-schema';
 import { uploadToR2, extensionForMimeType } from '@ipos-cloud/shared';
-import { tenantGuard } from '../../middleware/admin-guard.js';
+import { tenantGuard, requireTenantRole } from '../../middleware/admin-guard.js';
 
 // Dipakai tenant-app: dashboard toko login dengan JWT tenant_id (bukan admin).
 export async function tenantMeRoutes(app: FastifyInstance) {
@@ -43,8 +43,9 @@ export async function tenantMeRoutes(app: FastifyInstance) {
     };
   });
 
-  // Update profil toko — dipakai Setup Wizard step 1 & Pengaturan.
-  app.patch('/me', { preHandler: tenantGuard }, async (request: any) => {
+  // Update profil toko — dipakai Setup Wizard step 1 & Pengaturan. Owner-only: kasir
+  // sebelumnya bisa mengubah profil toko lewat route ini (akar temuan A).
+  app.patch('/me', { preHandler: requireTenantRole('owner') }, async (request: any) => {
     const body = z.object({
       name: z.string().min(2).max(30, 'Nama toko maksimal 30 karakter').optional(),
       logo_url: z.string().url().nullable().optional(),
@@ -70,8 +71,8 @@ export async function tenantMeRoutes(app: FastifyInstance) {
     return updated;
   });
 
-  // Upload logo ke R2, simpan URL-nya ke tenants.logo_url — key overwrite, ganti logo = upload ulang.
-  app.post('/me/logo', { preHandler: tenantGuard }, async (request: any, reply) => {
+  // Upload logo ke R2 — owner-only, sama alasannya dengan PATCH /me.
+  app.post('/me/logo', { preHandler: requireTenantRole('owner') }, async (request: any, reply) => {
     const { tenant_id } = request.user as { tenant_id: string };
     const db = (app as any).db;
     const r2 = (app as any).r2;
@@ -87,8 +88,8 @@ export async function tenantMeRoutes(app: FastifyInstance) {
     return updated;
   });
 
-  // Upload gambar QRIS statis ke R2, simpan URL-nya ke tenants.qris_url — sama pola dengan /me/logo.
-  app.post('/me/qris', { preHandler: tenantGuard }, async (request: any, reply) => {
+  // Upload gambar QRIS statis ke R2 — owner-only, sama alasannya dengan PATCH /me.
+  app.post('/me/qris', { preHandler: requireTenantRole('owner') }, async (request: any, reply) => {
     const { tenant_id } = request.user as { tenant_id: string };
     const db = (app as any).db;
     const r2 = (app as any).r2;
@@ -104,8 +105,9 @@ export async function tenantMeRoutes(app: FastifyInstance) {
     return updated;
   });
 
-  // Kirim email test ke akun yang login — dipakai tombol "Kirim Notifikasi Test" di Pengaturan > Notifikasi.
-  app.post('/me/test-notification', { preHandler: tenantGuard }, async (request: any, reply) => {
+  // Kirim email test — owner-only: bagian dari Pengaturan > Notifikasi, konsisten
+  // dengan rute penulis lain di file ini.
+  app.post('/me/test-notification', { preHandler: requireTenantRole('owner') }, async (request: any, reply) => {
     const { sub } = request.user as { sub: string };
     const db = (app as any).db;
     const [user] = await db.select({ name: users.name, email: users.email }).from(users).where(eq(users.id, sub)).limit(1);
