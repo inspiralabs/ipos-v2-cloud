@@ -23,7 +23,19 @@ export async function publicOfflineRoutes(app: FastifyInstance) {
     const db = (app as any).db;
 
     const [existing] = await db.select().from(offline_clients).where(eq(offline_clients.device_id_hash, device_id_hash)).limit(1);
-    if (existing) return reply.code(200).send({ ok: true, status: existing.status });
+    if (existing) {
+      // Nama dan telepon boleh mengikuti data di HP. Status, masa coba, dan
+      // tanggal daftar tidak berubah — restore bukan lisensi baru.
+      const store_name = body.storeName.trim();
+      const phone = body.phone?.trim();
+      const patch: { store_name?: string; phone?: string; updated_at: Date } = { updated_at: new Date() };
+      if (store_name && store_name !== existing.store_name) patch.store_name = store_name;
+      if (phone !== undefined && phone !== existing.phone) patch.phone = phone;
+      if (patch.store_name || patch.phone !== undefined) {
+        await db.update(offline_clients).set(patch).where(eq(offline_clients.id, existing.id));
+      }
+      return reply.code(200).send({ ok: true, status: existing.status });
+    }
 
     const trial_ends_at = new Date(Date.now() + TRIAL_DAYS * 86400000);
     await db.insert(offline_clients).values({
