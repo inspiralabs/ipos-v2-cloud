@@ -6,17 +6,26 @@ import { logAdminAction, softDeleteOne, restoreOne, softDeleteBulk } from '@ipos
 import { adminGuard, superAdminGuard } from '../../middleware/admin-guard.js';
 import { parsePagination } from '../../lib/pagination.js';
 
-// HARUS identik dengan ipos-offline/src/lib/license.ts (deriveKey) dan
-// ipos-v1-backend/src/lib/license.ts — device di app kasir memvalidasi
-// lisensi secara offline pakai formula yang sama persis, tidak ada
-// server round-trip. Beda formula = lisensi hasil generate di sini tidak
-// akan pernah valid di app.
+// Harus identik dengan ipos-offline/src/lib/license.ts (deriveKey).
+// App kasir memvalidasi lisensi secara offline: sha256(kodeHP + salt),
+// tanpa tanya server. Kode yang dibuat dari UUID lain tidak akan pernah
+// cocok, meskipun nama tokonya sama.
+function normalizeDeviceCode(code: string): string {
+  return code.trim().toLowerCase().replace(/\s+/g, '');
+}
+
 async function generateLicenseKey(deviceId: string, plan: 'lite' | 'pro'): Promise<string> {
   const salt = plan === 'lite'
-    ? process.env.OFFLINE_LICENSE_SALT_LITE!
-    : process.env.OFFLINE_LICENSE_SALT_PRO!;
+    ? process.env.OFFLINE_LICENSE_SALT_LITE
+    : process.env.OFFLINE_LICENSE_SALT_PRO;
+  if (!salt) {
+    throw Object.assign(
+      new Error('Salt lisensi belum dikonfigurasi di server. Generate dibatalkan supaya tidak menerbitkan kode yang pasti ditolak HP.'),
+      { statusCode: 422, code: 'SALT_MISSING' },
+    );
+  }
 
-  const raw = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${deviceId.trim().toLowerCase()}_${salt}`));
+  const raw = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${normalizeDeviceCode(deviceId)}_${salt}`));
   const hex = Buffer.from(raw).toString('hex').toUpperCase();
   return `${hex.slice(0, 4)}-${hex.slice(4, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}`;
 }
@@ -150,13 +159,29 @@ export async function offlineAdminRoutes(app: FastifyInstance) {
       client_id: z.string().uuid(),
       plan: z.enum(['lite', 'pro']),
       notes: z.string().optional(),
+      // Kode yang sedang tampil di HP customer (layar Versi & Aktivasi).
+      // Wajib, supaya admin tidak generate dari nama toko yang perangkatnya sudah beda.
+      device_code: z.string().min(1),
     }).parse(request.body);
 
     const db = (app as any).db;
     const [client] = await db.select().from(offline_clients).where(eq(offline_clients.id, body.client_id)).limit(1);
     if (!client) throw Object.assign(new Error('Client not found'), { statusCode: 404, code: 'NOT_FOUND' });
 
-    const license_key = await generateLicenseKey(client.device_id_hash, body.plan);
+    const pasted = normalizeDeviceCode(body.device_code);
+    const stored = normalizeDeviceCode(client.device_id_hash);
+    if (!pasted) {
+      throw Object.assign(new Error('Tempel kode HP dari aplikasi customer dulu.'), { statusCode: 400, code: 'DEVICE_REQUIRED' });
+    }
+    if (pasted !== stored) {
+      const [owner] = await db.select().from(offline_clients).where(eq(offline_clients.device_id_hash, pasted)).limit(1);
+      const message = owner
+        ? `Kode HP ini milik "${owner.store_name}", bukan "${client.store_name}". Generate dari klien itu.`
+        : 'Kode HP ini belum terdaftar. Minta customer buka aplikasi kasir saat online, lalu tempel kode yang sama persis dari layar Versi & Aktivasi.';
+      throw Object.assign(new Error(message), { statusCode: 409, code: owner ? 'DEVICE_MISMATCH' : 'DEVICE_NOT_REGISTERED' });
+    }
+
+    const license_key = await generateLicenseKey(stored, body.plan);
     const adminId = (request.user as any).sub;
 
     const [existing] = await db.select().from(offline_licenses).where(eq(offline_licenses.license_key, license_key)).limit(1);
