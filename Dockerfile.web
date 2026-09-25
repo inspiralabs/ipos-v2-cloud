@@ -9,6 +9,8 @@ WORKDIR /app
 
 FROM base AS deps
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY packages/drizzle-schema/package.json packages/drizzle-schema/
+COPY packages/shared/package.json packages/shared/
 COPY apps/admin-app/package.json apps/admin-app/
 COPY apps/tenant-app/package.json apps/tenant-app/
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
@@ -19,7 +21,11 @@ ARG APP_NAME
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 COPY . .
-RUN pnpm --filter ${APP_NAME} build
+# .dockerignore membuang **/dist, jadi subpath @ipos-cloud/shared/plan-features
+# (dipakai tenant-app) tidak ada sampai kedua paket ini di-build di dalam image.
+RUN pnpm --filter @ipos-cloud/drizzle-schema build \
+ && pnpm --filter @ipos-cloud/shared build \
+ && pnpm --filter ${APP_NAME} build
 
 FROM base AS runtime
 ARG APP_NAME
