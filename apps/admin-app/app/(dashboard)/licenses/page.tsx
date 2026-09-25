@@ -48,17 +48,56 @@ function statusInfo(status: string): { tone: BadgeTone; label: string } {
   return { tone: 'inactive', label: status };
 }
 
+function normalizeDeviceCode(code: string) {
+  return code.trim().toLowerCase().replace(/\s+/g, '');
+}
+
+/** Sama persis dengan tampilan di HP: UUID huruf besar, tanpa spasi. */
+function formatDeviceCode(code: string) {
+  return code.trim().toUpperCase().replace(/\s+/g, '');
+}
+
+function CopyDeviceCode({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  const shown = formatDeviceCode(code);
+
+  function copy() {
+    navigator.clipboard.writeText(shown);
+    setCopied(true);
+    toast.success('Kode HP disalin.');
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title="Salin Kode HP"
+      className="inline-flex max-w-full items-start gap-1 text-left font-mono text-[11px] leading-snug text-[var(--ink)] hover:text-[var(--primary)]"
+    >
+      <span className="break-all">{shown}</span>
+      {copied
+        ? <Check className="mt-0.5 h-3 w-3 shrink-0 text-[var(--status-active)]" aria-hidden />
+        : <Copy className="mt-0.5 h-3 w-3 shrink-0 text-[var(--muted)]" aria-hidden />}
+    </button>
+  );
+}
+
 function GenerateModal({ client, onClose }: { client: Client; onClose: () => void }) {
   const qc = useQueryClient();
   const [plan, setPlan] = useState<'lite' | 'pro'>(client.plan ?? 'lite');
+  const [deviceCode, setDeviceCode] = useState('');
   const [copied, setCopied] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const storedCode = normalizeDeviceCode(client.device_id_hash);
+  const pastedCode = normalizeDeviceCode(deviceCode);
+  const codeMatches = pastedCode.length > 0 && pastedCode === storedCode;
 
   const mut = useMutation({
     mutationFn: () =>
       apiFetch(`/api/v1/admin/offline/licenses/generate`, {
         method: 'POST',
-        body: JSON.stringify({ client_id: client.id, plan }),
+        body: JSON.stringify({ client_id: client.id, plan, device_code: deviceCode.trim() }),
       }),
     onSuccess: (data) => {
       setResult(data.license_key);
@@ -97,7 +136,9 @@ function GenerateModal({ client, onClose }: { client: Client; onClose: () => voi
           <>
             <DialogHeader>
               <DialogTitle>Generate Lisensi</DialogTitle>
-              <DialogDescription>{client.tenant_name}</DialogDescription>
+              <DialogDescription>
+                {client.tenant_name}. Cocokkan Kode HP di bawah dengan yang di layar Versi & Aktivasi sebelum generate.
+              </DialogDescription>
             </DialogHeader>
             <div className="mb-2 flex gap-2" role="radiogroup" aria-label="Pilih paket">
               {(['lite', 'pro'] as const).map((p) => (
@@ -118,11 +159,41 @@ function GenerateModal({ client, onClose }: { client: Client; onClose: () => voi
               ))}
             </div>
             {client.license_key && (
-              <p className="mb-4 text-xs text-[var(--status-trial)]">Sudah ada lisensi. Generate ulang akan mengganti kode lama.</p>
+              <p className="mb-3 text-xs text-[var(--status-trial)]">Sudah ada lisensi. Generate ulang akan mengganti kode lama.</p>
+            )}
+            <div className={`mb-3 rounded-xl border p-3 ${codeMatches ? 'border-[var(--status-active)] bg-[var(--status-active)]/10' : 'border-[var(--border)] bg-[var(--surface-2)]'}`}>
+              <p className="mb-1 text-xs text-[var(--muted)]">Kode HP tersimpan untuk toko ini</p>
+              <p className="select-all break-all font-mono text-xs font-semibold tracking-wide text-[var(--ink)]">
+                {formatDeviceCode(client.device_id_hash)}
+              </p>
+            </div>
+            <div className="mb-1">
+              <Label htmlFor="device-code">Tempel Kode HP yang customer kirim</Label>
+              <Input
+                id="device-code"
+                value={deviceCode}
+                onChange={(e) => setDeviceCode(e.target.value)}
+                placeholder="Dari layar Versi & Aktivasi"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                className="font-mono uppercase"
+              />
+            </div>
+            {pastedCode.length === 0 && (
+              <p className="mb-2 text-xs text-[var(--muted)]">Generate terkunci sampai kode yang ditempel sama dengan kode di atas.</p>
+            )}
+            {pastedCode.length > 0 && !codeMatches && (
+              <p className="mb-2 text-xs text-[var(--status-expired)]">
+                Belum cocok. Tutup dialog ini, tempel kode customer di kotak pencarian, lalu generate dari baris yang muncul. Kalau tidak ada, minta customer membuka aplikasi saat online dan kirim ulang kodenya.
+              </p>
+            )}
+            {codeMatches && (
+              <p className="mb-2 text-xs font-medium text-[var(--status-active)]">Kode HP cocok. Kode aktivasi ini akan diterima HP tersebut.</p>
             )}
             <div className="mt-4 flex gap-2">
               <Button variant="outline" onClick={onClose} className="flex-1">Batal</Button>
-              <Button onClick={() => mut.mutate()} disabled={mut.isPending} className="flex-1">
+              <Button onClick={() => mut.mutate()} disabled={mut.isPending || !codeMatches} className="flex-1">
                 {mut.isPending ? 'Memproses...' : 'Generate'}
               </Button>
             </div>
@@ -292,6 +363,7 @@ export default function LicensesPage() {
   function exportCsv() {
     downloadCsv('lisensi-offline.csv', filtered.map((c) => ({
       Toko: c.tenant_name, Telepon: c.contact_phone, Status: statusInfo(c.status).label,
+      'Kode HP': formatDeviceCode(c.device_id_hash),
       Lisensi: c.license_key ?? '', Daftar: c.created_at.slice(0, 10),
     })));
   }
@@ -327,7 +399,9 @@ export default function LicensesPage() {
   return (
     <div>
       <h1 className="mb-1 font-display text-xl font-bold text-[var(--ink)]">Lisensi Offline</h1>
-      <p className="mb-6 text-sm text-[var(--muted)]">Kelola klien kasir offline dan generate kode lisensi.</p>
+      <p className="mb-6 text-sm text-[var(--muted)]">
+        Cocokkan Kode HP di daftar ini dengan yang di layar Versi & Aktivasi customer. Kode aktivasi hanya berlaku untuk Kode HP yang sama.
+      </p>
 
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatCard label="Klien Trial" value={stats.trial} tone="trial" />
@@ -342,7 +416,7 @@ export default function LicensesPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari nama toko, device ID, atau telepon..."
+            placeholder="Cari nama toko, Kode HP, atau telepon..."
             className="pl-9"
           />
         </div>
@@ -378,7 +452,11 @@ export default function LicensesPage() {
       ) : filtered.length === 0 ? (
         <Card className="py-12 text-center">
           <p className="text-sm text-[var(--muted)]">
-            {clients.length === 0 ? 'Belum ada pendaftaran klien offline.' : 'Tidak ada klien yang cocok dengan pencarian.'}
+            {clients.length === 0
+              ? 'Belum ada pendaftaran klien offline.'
+              : /^[0-9a-f-]{8,}$/i.test(debouncedSearch.trim())
+                ? 'Kode HP ini belum terdaftar. Minta customer membuka aplikasi kasir saat online, lalu kirim ulang kode dari layar Versi & Aktivasi.'
+                : 'Tidak ada klien yang cocok dengan pencarian.'}
           </p>
         </Card>
       ) : (
@@ -394,6 +472,7 @@ export default function LicensesPage() {
                   <TableHead>
                     <button className="flex items-center gap-1" onClick={() => toggleSort('tenant_name')}>Toko <ArrowUpDown className="h-3 w-3" /></button>
                   </TableHead>
+                  <TableHead>Kode HP</TableHead>
                   <TableHead>Kontak</TableHead>
                   <TableHead>
                     <button className="flex items-center gap-1" onClick={() => toggleSort('status')}>Status <ArrowUpDown className="h-3 w-3" /></button>
@@ -415,7 +494,9 @@ export default function LicensesPage() {
                       </TableCell>
                       <TableCell>
                         <p className="font-medium text-[var(--ink)]">{c.tenant_name}</p>
-                        <p className="font-mono text-[10px] text-[var(--muted)]">{c.device_id_hash.slice(0, 16)}…</p>
+                      </TableCell>
+                      <TableCell className="max-w-[240px]">
+                        <CopyDeviceCode code={c.device_id_hash} />
                       </TableCell>
                       <TableCell className="text-[var(--muted)]">{c.contact_phone || '-'}</TableCell>
                       <TableCell><Badge tone={info.tone}>{info.label}</Badge></TableCell>
@@ -457,10 +538,13 @@ export default function LicensesPage() {
                           <ActionMenu client={c} isSuperAdmin={isSuperAdmin} onEdit={() => setEditing(c)} onGenerate={() => setGenerating(c)} onRefresh={refresh} />
                         </div>
                       </div>
+                      <div className="mt-2">
+                        <p className="mb-0.5 text-[11px] text-[var(--muted)]">Kode HP</p>
+                        <CopyDeviceCode code={c.device_id_hash} />
+                      </div>
                       {c.license_key && (
                         <p className="mt-2 font-mono text-xs text-[var(--ink)]">{c.license_key}</p>
                       )}
-                      <p className="mt-1 font-mono text-[10px] text-[var(--muted)]">{c.device_id_hash.slice(0, 20)}…</p>
                       <div className="mt-2 flex items-center justify-between">
                         <p className="text-[11px] text-[var(--muted)]">Daftar {c.created_at.slice(0, 10)}</p>
                         {!c.deleted_at && (
