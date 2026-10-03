@@ -1,6 +1,22 @@
+# VPS Inspiralabs: app ipos-v2-cloud. Domain lewat Traefik (network edge), tanpa port publik:
+#   api.inspirapos.biz.id → nginx gateway, admindash.inspirapos.biz.id → admin-app, tenant.inspirapos.biz.id → tenant-app
+x-node-health: &node-health
+  test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+process.env.PORT+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+  interval: 15s
+  timeout: 5s
+  retries: 3
+  start_period: 30s
+x-web-health: &web-health
+  test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+process.env.PORT+'/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
+  interval: 15s
+  timeout: 5s
+  retries: 3
+  start_period: 30s
+
 services:
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     # ponytail: tidak di-expose ke host — cuma dipakai antar-container lewat redis://redis:6379.
     # Kalau perlu redis-cli dari host, `docker compose exec redis redis-cli`.
     volumes:
@@ -35,6 +51,7 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck: *node-health
 
   tenant-service:
     build:
@@ -63,6 +80,7 @@ services:
       - auth-service
       - notification-service
     restart: unless-stopped
+    healthcheck: *node-health
 
   pos-service:
     build:
@@ -81,6 +99,7 @@ services:
       INTERNAL_API_KEY: "${INTERNAL_API_KEY}"
       CORS_ORIGIN: ${CORS_ORIGIN}
     restart: unless-stopped
+    healthcheck: *node-health
 
   catalog-service:
     build:
@@ -100,6 +119,7 @@ services:
       R2_PUBLIC_URL: ${R2_PUBLIC_URL}
       CORS_ORIGIN: ${CORS_ORIGIN}
     restart: unless-stopped
+    healthcheck: *node-health
 
   inventory-service:
     build:
@@ -109,6 +129,7 @@ services:
         SERVICE_NAME: inventory-service
     environment: { PORT: 3005, DATABASE_URL: "${DATABASE_URL}", JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}", INTERNAL_API_KEY: "${INTERNAL_API_KEY}", CORS_ORIGIN: "${CORS_ORIGIN}" }
     restart: unless-stopped
+    healthcheck: *node-health
 
   kitchen-service:
     build:
@@ -127,6 +148,7 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck: *node-health
 
   table-service:
     build:
@@ -145,6 +167,7 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck: *node-health
 
   report-service:
     build:
@@ -154,6 +177,7 @@ services:
         SERVICE_NAME: report-service
     environment: { PORT: 3008, DATABASE_URL: "${DATABASE_URL}", JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY}", CORS_ORIGIN: "${CORS_ORIGIN}" }
     restart: unless-stopped
+    healthcheck: *node-health
 
   notification-service:
     build:
@@ -169,6 +193,7 @@ services:
       FONNTE_TOKEN: ${FONNTE_TOKEN}
       CORS_ORIGIN: ${CORS_ORIGIN}
     restart: unless-stopped
+    healthcheck: *node-health
 
   websocket-gateway:
     build:
@@ -185,6 +210,7 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck: *node-health
 
   admin-app:
     build:
@@ -193,10 +219,16 @@ services:
       args:
         APP_NAME: admin-app
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-    ports:
-      - "127.0.0.1:3010:3010"
+    expose: ["3010"]
     environment:
       PORT: 3010
+      HOSTNAME: 0.0.0.0           # Next standalone: dengar di semua interface (healthcheck + Traefik)
+    networks: [default, edge]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.ipos-admin.rule=Host(`admindash.inspirapos.biz.id`)
+      - traefik.http.services.ipos-admin.loadbalancer.server.port=3010
+    healthcheck: *web-health
     depends_on:
       - auth-service
       - tenant-service
@@ -209,10 +241,16 @@ services:
       args:
         APP_NAME: tenant-app
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-    ports:
-      - "127.0.0.1:3012:3100"
+    expose: ["3100"]
     environment:
       PORT: 3100
+      HOSTNAME: 0.0.0.0           # Next standalone: dengar di semua interface (healthcheck + Traefik)
+    networks: [default, edge]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.ipos-tenant.rule=Host(`tenant.inspirapos.biz.id`)
+      - traefik.http.services.ipos-tenant.loadbalancer.server.port=3100
+    healthcheck: *web-health
     depends_on:
       - auth-service
       - tenant-service
@@ -220,12 +258,19 @@ services:
 
   nginx:
     image: nginx:alpine
-    ports:
-      # Hanya loopback: cloudflared jalan di host dan menembak localhost:80.
-      # 0.0.0.0 akan membuat gateway terjangkau langsung dari internet, melewati tunnel.
-      # Mengubah ini ke 0.0.0.0 juga membatalkan asumsi keamanan set_real_ip_from
-      # 0.0.0.0/0 di nginx/nginx.conf:16-27 — lihat komentar di sana.
-      - "127.0.0.1:80:80"
+    # Tanpa port ke host: Cloudflare Tunnel → Traefik (VPS) → nginx lewat network edge. Satu-satunya jalur masuk
+    # tetap tunnel, jadi asumsi set_real_ip_from di nginx/nginx.conf tetap berlaku (Traefik meneruskan CF-Connecting-IP).
+    expose: ["80"]
+    networks: [default, edge]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.ipos-v2-cloud-api.rule=Host(`api.inspirapos.biz.id`)
+      - traefik.http.services.ipos-v2-cloud-api.loadbalancer.server.port=80
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://auth-service:3001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
@@ -235,3 +280,7 @@ services:
 
 volumes:
   redis_data:
+
+networks:
+  edge:
+    external: true
